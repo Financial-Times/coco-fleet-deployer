@@ -254,7 +254,7 @@ func (d *deployer) buildCurrentUnits() (map[string]*schema.Unit, error) {
 }
 
 func (d *deployer) renderServiceFile(name string, context ...interface{}) (string, error) {
-	resp, err := d.httpClient.Get(fmt.Sprintf("https://raw.githubusercontent.com/Zapadlo/terraform-fleet/master/service-files/%s", name))
+	resp, err := d.httpClient.Get(fmt.Sprintf("https://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/%s", name))
 	if err != nil {
 		return "", err
 	}
