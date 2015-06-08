@@ -18,6 +18,7 @@ import (
 
 var destroyFlag = flag.Bool("destroy", false, "Destroy units not found in the definition")
 var fleetEndpoint = flag.String("fleetEndpoint", "", "Fleet API http endpoint: `http://host:port`")
+var serviceFilesUri = flag.String("serviceFilesUri", "", "URI directory that contains service files: `https://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/`")
 
 type services struct {
 	Services []service `yaml:"services"`
@@ -255,7 +256,7 @@ func (d *deployer) buildCurrentUnits() (map[string]*schema.Unit, error) {
 }
 
 func (d *deployer) renderServiceFile(name string, context ...interface{}) (string, error) {
-	resp, err := d.httpClient.Get(fmt.Sprintf("https://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/%s", name))
+	resp, err := d.httpClient.Get(fmt.Sprintf("%s%s", *serviceFilesUri, name))
 	if err != nil {
 		return "", err
 	}
