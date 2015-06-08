@@ -70,10 +70,13 @@ func (d *deployer) deployUnit(wantedUnit *schema.Unit) error {
 
 	wuf := schema.MapSchemaUnitOptionsToUnitFile(wantedUnit.Options)
 	cuf := schema.MapSchemaUnitOptionsToUnitFile(currentUnit.Options)
-	if wuf.String() != cuf.String() {
+	wufUnescapedString := strings.Replace(wuf.String(), "\\\n", "", -1)
+        if strings.Replace(wufUnescapedString, " ", "", -1) != strings.Replace(cuf.String(), " ", "", -1) {
+		
 		log.Printf("Service %s differs from the cluster version", wantedUnit.Name)
-		err := d.fleetapi.CreateUnit(wantedUnit)
-		if err != nil {
+		wantedUnit.DesiredState = "inactive"
+                err := d.fleetapi.CreateUnit(wantedUnit)
+                if err != nil {
 			return err
 		}
 	}
@@ -118,6 +121,7 @@ func (d *deployer) launchAll() error {
 func (d *deployer) deployAll() error {
 	// Get service definition - wanted units
 	wantedUnits, err := d.buildWantedUnits()
+	
 	if err != nil {
 		return err
 	}
@@ -214,7 +218,6 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, error) {
 
 		if srv.Count == 0 {
 			u := &schema.Unit{
-				//	DesiredState: "launched",
 				Name:    srv.Name,
 				Options: schema.MapUnitFileToSchemaUnitOptions(uf),
 			}
@@ -228,7 +231,6 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, error) {
 				xName := strings.Replace(srv.Name, "@", fmt.Sprintf("@%d", i+1), -1)
 
 				u := &schema.Unit{
-					//	DesiredState: "launched",
 					Name:    xName,
 					Options: schema.MapUnitFileToSchemaUnitOptions(uf),
 				}
