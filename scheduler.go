@@ -16,6 +16,9 @@ import (
 	"strings"
 )
 
+var destroyFlag = flag.Bool("destroy", false, "Destroy units not found in the definition")
+var fleetEndpoint = flag.String("fleetEndpoint", "", "Fleet API http endpoint: `http://host:port`")
+
 type services struct {
 	Services []service `yaml:"services"`
 }
@@ -41,14 +44,12 @@ func getServiceDefinition() (services services) {
 }
 
 func main() {
-	destroyFlag := flag.Bool("destroy", false, "Destroy units not found in the definition")
-	fleetEndpoint := flag.String("fleetEndpoint", "", "Fleet API http endpoint: `http://host:port`")
 	flag.Parse()
 	if *fleetEndpoint == "" {
 		log.Fatal("Fleet endpoint is required")
 	}
 
-	d, err := newDeployer(fleetEndpoint, *destroyFlag)
+	d, err := newDeployer()
 	check(err)
 
 	err = d.deployAll()
@@ -173,7 +174,7 @@ func (api noDestroyFleetAPI) DestroyUnit(name string) error {
 	return nil
 }
 
-func newDeployer(fleetEndpoint *string, destroyFlag bool) (deployer, error) {
+func newDeployer() (deployer, error) {
 	u, err := url.Parse(*fleetEndpoint)
 	if err != nil {
 		return deployer{}, err
@@ -184,7 +185,7 @@ func newDeployer(fleetEndpoint *string, destroyFlag bool) (deployer, error) {
 		return deployer{}, err
 	}
 	hc = loggingFleetAPI{hc}
-	if !destroyFlag {
+	if !*destroyFlag {
 		log.Println("destroy not enabled (use -destroy to enable)")
 		hc = noDestroyFleetAPI{hc}
 	}
