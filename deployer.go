@@ -19,6 +19,7 @@ import (
 var destroyFlag = flag.Bool("destroy", false, "Destroy units not found in the definition")
 var fleetEndpoint = flag.String("fleetEndpoint", "", "Fleet API http endpoint: `http://host:port`")
 var serviceFilesUri = flag.String("serviceFilesUri", "", "URI directory that contains service files: `https://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/`")
+var servicesDefinitionFileUri = flag.String("servicesDefinitionFileUri", "", "URI file that contains services definition: `https://raw.githubusercontent.com/Financial-Times/fleet/master/services.yaml`")
 
 type services struct {
 	Services []service `yaml:"services"`
@@ -36,8 +37,12 @@ func check(e error) {
 	}
 }
 
-func getServiceDefinition() (services services) {
-	serviceYaml, err := ioutil.ReadFile("services.yaml")
+func getServiceDefinition(httpClient *http.Client) (services services) {
+	resp, err := httpClient.Get(*servicesDefinitionFileUri)
+	check(err)
+	defer resp.Body.Close()
+
+	serviceYaml, err := ioutil.ReadAll(resp.Body)
 	check(err)
 	err = yaml.Unmarshal(serviceYaml, &services)
 	check(err)
@@ -48,6 +53,14 @@ func main() {
 	flag.Parse()
 	if *fleetEndpoint == "" {
 		log.Fatal("Fleet endpoint is required")
+	}
+        
+	if *serviceFilesUri == "" {
+		log.Fatal("Service files uri is required")
+	}
+	
+	if *servicesDefinitionFileUri== "" {
+		log.Fatal("Services definition file uri is required")
 	}
 
 	d, err := newDeployer()
@@ -204,7 +217,7 @@ type deployer struct {
 
 func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, error) {
 	units := make(map[string]*schema.Unit)
-	for _, srv := range getServiceDefinition().Services {
+	for _, srv := range getServiceDefinition(d.httpClient).Services {
 		vars := make(map[string]interface{})
 		vars["version"] = srv.Version
 		serviceFile, err := d.renderServiceFile(srv.Name, vars)
