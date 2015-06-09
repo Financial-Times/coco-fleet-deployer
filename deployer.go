@@ -54,12 +54,12 @@ func main() {
 	if *fleetEndpoint == "" {
 		log.Fatal("Fleet endpoint is required")
 	}
-        
+
 	if *serviceFilesUri == "" {
 		log.Fatal("Service files uri is required")
 	}
-	
-	if *servicesDefinitionFileUri== "" {
+
+	if *servicesDefinitionFileUri == "" {
 		log.Fatal("Services definition file uri is required")
 	}
 
@@ -86,12 +86,12 @@ func (d *deployer) deployUnit(wantedUnit *schema.Unit) error {
 	wuf := schema.MapSchemaUnitOptionsToUnitFile(wantedUnit.Options)
 	cuf := schema.MapSchemaUnitOptionsToUnitFile(currentUnit.Options)
 	wufUnescapedString := strings.Replace(wuf.String(), "\\\n", "", -1)
-        if strings.Replace(wufUnescapedString, " ", "", -1) != strings.Replace(cuf.String(), " ", "", -1) {
-		
+	if strings.Replace(wufUnescapedString, " ", "", -1) != strings.Replace(cuf.String(), " ", "", -1) {
+
 		log.Printf("Service %s differs from the cluster version", wantedUnit.Name)
 		wantedUnit.DesiredState = "inactive"
-                err := d.fleetapi.CreateUnit(wantedUnit)
-                if err != nil {
+		err := d.fleetapi.CreateUnit(wantedUnit)
+		if err != nil {
 			return err
 		}
 	}
@@ -136,7 +136,7 @@ func (d *deployer) launchAll() error {
 func (d *deployer) deployAll() error {
 	// Get service definition - wanted units
 	wantedUnits, err := d.buildWantedUnits()
-	
+
 	if err != nil {
 		return err
 	}
