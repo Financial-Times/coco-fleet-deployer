@@ -89,7 +89,6 @@ func (d *deployer) deployUnit(wantedUnit *schema.Unit) error {
 
 	wuf := schema.MapSchemaUnitOptionsToUnitFile(wantedUnit.Options)
 	cuf := schema.MapSchemaUnitOptionsToUnitFile(currentUnit.Options)
-	fmt.Printf("FOO:\n%T\n", wuf)
 	wufUnescapedString := strings.Replace(wuf.String(), "\\\n", "", -1)
 	if strings.Replace(wufUnescapedString, " ", "", -1) != strings.Replace(cuf.String(), " ", "", -1) {
 
