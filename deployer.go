@@ -288,11 +288,3 @@ func (d *deployer) renderServiceFile(name string, context ...interface{}) (strin
 	}
 	return tmpl.Render(context...), nil
 }
-
-func renderMustache(filename string, context ...interface{}) (string, error) {
-	tmpl, err := mustache.ParseFile(filename)
-	if err != nil {
-		return "", err
-	}
-	return tmpl.Render(context...), nil
-}
