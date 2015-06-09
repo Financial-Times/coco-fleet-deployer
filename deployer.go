@@ -8,18 +8,22 @@ import (
 	"github.com/coreos/fleet/schema"
 	"github.com/coreos/fleet/unit"
 	"github.com/hoisie/mustache"
+	"golang.org/x/net/proxy"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
 
 var destroyFlag = flag.Bool("destroy", false, "Destroy units not found in the definition")
 var fleetEndpoint = flag.String("fleetEndpoint", "", "Fleet API http endpoint: `http://host:port`")
 var serviceFilesUri = flag.String("serviceFilesUri", "", "URI directory that contains service files: `https://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/`")
 var servicesDefinitionFileUri = flag.String("servicesDefinitionFileUri", "", "URI file that contains services definition: `https://raw.githubusercontent.com/Financial-Times/fleet/master/services.yaml`")
+var socksProxy = flag.String("socksProxy", "", "address of socks proxy, e.g., 127.0.0.1:9050")
 
 type services struct {
 	Services []service `yaml:"services"`
@@ -85,6 +89,7 @@ func (d *deployer) deployUnit(wantedUnit *schema.Unit) error {
 
 	wuf := schema.MapSchemaUnitOptionsToUnitFile(wantedUnit.Options)
 	cuf := schema.MapSchemaUnitOptionsToUnitFile(currentUnit.Options)
+	fmt.Printf("FOO:\n%T\n", wuf)
 	wufUnescapedString := strings.Replace(wuf.String(), "\\\n", "", -1)
 	if strings.Replace(wufUnescapedString, " ", "", -1) != strings.Replace(cuf.String(), " ", "", -1) {
 
@@ -198,6 +203,25 @@ func newDeployer() (deployer, error) {
 		return deployer{}, err
 	}
 	httpClient := &http.Client{}
+
+	if *socksProxy != "" {
+		log.Printf("using proxy %s\n", *socksProxy)
+		netDialler := &net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}
+		dialer, err := proxy.SOCKS5("tcp", *socksProxy, nil, netDialler)
+		if err != nil {
+			log.Fatal("error with proxy %s: %v\n", socksProxy, err)
+		}
+		httpClient.Transport = &http.Transport{
+			Proxy:               http.ProxyFromEnvironment,
+			Dial:                dialer.Dial,
+			TLSHandshakeTimeout: 10 * time.Second,
+		}
+
+	}
+
 	hc, err := client.NewHTTPClient(httpClient, *u)
 	if err != nil {
 		return deployer{}, err
