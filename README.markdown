@@ -1,4 +1,4 @@
-Application to deploys specified services to the cluster.
+#An application to deploy our services to a Fleet cluster.
 
 Installation:
 
