@@ -1,9 +1,5 @@
-FROM fedora
-RUN yum -y install etcd golang mongodb
+from golang
 
-ADD mongoconf.go /
-RUN go build mongoconf.go
-
-ADD conf.sh /
-CMD /conf.sh
+RUN go get github.com/Financial-Times/coco-fleet-deployer
+CMD $GOPATH/bin/coco-fleet-deployer -fleetEndpoint=$FLEET_ENDPOINT -serviceFilesUri=$SERVICE_FILES_URI -servicesDefinitionFileUri=$SERVICES_DEFINITION_FILE_URI -intervalInSecondsBetweenDeploys=$INTERVAL_IN_SECONDS_BETWEEN_DEPLOYS -destroy=$DESTROY
 

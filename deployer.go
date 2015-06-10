@@ -23,6 +23,7 @@ var destroyFlag = flag.Bool("destroy", false, "Destroy units not found in the de
 var fleetEndpoint = flag.String("fleetEndpoint", "", "Fleet API http endpoint: `http://host:port`")
 var serviceFilesUri = flag.String("serviceFilesUri", "", "URI directory that contains service files: `https://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/`")
 var servicesDefinitionFileUri = flag.String("servicesDefinitionFileUri", "", "URI file that contains services definition: `https://raw.githubusercontent.com/Financial-Times/fleet/master/services.yaml`")
+var intervalInSecondsBetweenDeploys = flag.Int("intervalInSecondsBetweenDeploys", 600, "Interval in seconds between deploys")
 var socksProxy = flag.String("socksProxy", "", "address of socks proxy, e.g., 127.0.0.1:9050")
 
 type services struct {
@@ -69,9 +70,12 @@ func main() {
 
 	d, err := newDeployer()
 	check(err)
-
+	
+	for {
 	err = d.deployAll()
 	check(err)
+        time.Sleep(time.Duration(*intervalInSecondsBetweenDeploys) * time.Second)
+    }
 }
 
 func (d *deployer) deployUnit(wantedUnit *schema.Unit) error {
