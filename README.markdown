@@ -1,4 +1,6 @@
-#An application to deploy our services to a Fleet cluster.
+##coco-fleet-deployer
+
+###An application to deploy our services to a Fleet cluster.
 
 Installation:
 
