@@ -1,7 +1,7 @@
 package main
 
 import (
-	"errors"
+	_ "errors"
 	"flag"
 	"fmt"
 	"github.com/coreos/fleet/client"
@@ -68,14 +68,14 @@ func main() {
 		log.Fatal("Services definition file uri is required")
 	}
 
-	d, err := newDeployer()
+	d, err := newDeployer(getServiceDefinition)
 	check(err)
-	
+
 	for {
-	err = d.deployAll()
-	check(err)
-        time.Sleep(time.Duration(*intervalInSecondsBetweenDeploys) * time.Second)
-    }
+		err = d.deployAll()
+		check(err)
+		time.Sleep(time.Duration(*intervalInSecondsBetweenDeploys) * time.Second)
+	}
 }
 
 func (d *deployer) deployUnit(wantedUnit *schema.Unit) error {
@@ -143,7 +143,7 @@ func (d *deployer) launchAll() error {
 
 func (d *deployer) deployAll() error {
 	// Get service definition - wanted units
-	wantedUnits, err := d.buildWantedUnits()
+	wantedUnits, err := d.buildWantedUnits(d)
 
 	if err != nil {
 		return err
@@ -200,10 +200,22 @@ func (api noDestroyFleetAPI) DestroyUnit(name string) error {
 	return nil
 }
 
-func newDeployer() (deployer, error) {
+type ServiceDefinitionGetter func(httpClient *http.Client) services
+
+type ServiceFileRenderer interface {
+	renderServiceFile(name string, context ...interface{}) (string, error)
+}
+
+type deployer struct {
+	httpClient              *http.Client
+	fleetapi                client.API
+	serviceDefinitionGetter ServiceDefinitionGetter
+}
+
+func newDeployer(serviceDefinitionGetter ServiceDefinitionGetter) (*deployer, error) {
 	u, err := url.Parse(*fleetEndpoint)
 	if err != nil {
-		return deployer{}, err
+		return &deployer{}, err
 	}
 	httpClient := &http.Client{}
 
@@ -227,27 +239,22 @@ func newDeployer() (deployer, error) {
 
 	hc, err := client.NewHTTPClient(httpClient, *u)
 	if err != nil {
-		return deployer{}, err
+		return &deployer{serviceDefinitionGetter: serviceDefinitionGetter}, err
 	}
 	hc = loggingFleetAPI{hc}
 	if !*destroyFlag {
 		log.Println("destroy not enabled (use -destroy to enable)")
 		hc = noDestroyFleetAPI{hc}
 	}
-	return deployer{httpClient, hc}, nil
+	return &deployer{httpClient: httpClient, fleetapi: hc, serviceDefinitionGetter: serviceDefinitionGetter}, nil
 }
 
-type deployer struct {
-	httpClient *http.Client
-	fleetapi   client.API
-}
-
-func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, error) {
+func (d *deployer) buildWantedUnits(sfr ServiceFileRenderer) (map[string]*schema.Unit, error) {
 	units := make(map[string]*schema.Unit)
-	for _, srv := range getServiceDefinition(d.httpClient).Services {
+	for _, srv := range d.serviceDefinitionGetter(d.httpClient).Services {
 		vars := make(map[string]interface{})
 		vars["version"] = srv.Version
-		serviceFile, err := d.renderServiceFile(srv.Name, vars)
+		serviceFile, err := sfr.renderServiceFile(srv.Name, vars)
 		if err != nil {
 			return nil, err
 		}
@@ -258,17 +265,14 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, error) {
 			return nil, err
 		}
 
-		if srv.Count == 0 {
+		if srv.Count == 0 && !strings.Contains(srv.Name, "@") {
 			u := &schema.Unit{
 				Name:    srv.Name,
 				Options: schema.MapUnitFileToSchemaUnitOptions(uf),
 			}
 
 			units[srv.Name] = u
-		} else {
-			if !strings.Contains(srv.Name, "@") {
-				return nil, errors.New("instances specified on non-template service file")
-			}
+		} else if srv.Count > 0 && strings.Contains(srv.Name, "@") {
 			for i := 0; i < srv.Count; i++ {
 				xName := strings.Replace(srv.Name, "@", fmt.Sprintf("@%d", i+1), -1)
 
@@ -279,6 +283,9 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, error) {
 
 				units[u.Name] = u
 			}
+		} else {
+			log.Printf("WARNING skipping service: %s, incorrect service definition", srv.Name)
+			//return nil, errors.New("instances specified on non-template service file")
 		}
 	}
 	return units, nil
