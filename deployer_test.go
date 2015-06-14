@@ -19,10 +19,9 @@ services:
     version: latest
   - name: annotations-api@.service 
     version: latest
-    count: 1
+    count: 0
   - name: annotations-api-sidekick@.service 
-    version: latest
-    count: 1`)
+    version: latest`)
 	yaml.Unmarshal(serviceYaml, &services)
 	return services
 
@@ -51,5 +50,12 @@ func TestBuildWantedUnits(t *testing.T) {
 	if err != nil {
 		t.Errorf("wanted units threw an error: %v", err)
 	}
+	if wantedUnits["annotations-api@.service"] != nil {
+		t.Fatalf("Scheduled a '@' unit with 0 count")
+	}
+	if wantedUnits["annotations-api-sidekick@.service"] != nil {
+		t.Fatalf("Scheduled a '@' unit without a count")
+	}
+
 	t.Logf("Passed with wanted units: %v", wantedUnits)
 }
