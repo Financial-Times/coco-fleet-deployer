@@ -1,7 +1,7 @@
 package main
 
 import (
-	"errors"
+	_ "errors"
 	"flag"
 	"fmt"
 	"github.com/coreos/fleet/client"
@@ -36,14 +36,23 @@ type service struct {
 	Count   int    `yaml:"count"`
 }
 
+type serviceDefinitionClient interface {
+	servicesDefinition() (services services)
+	renderedServiceFile(name string, context ...interface{}) (string, error)
+}
+
 func check(e error) {
 	if e != nil {
 		panic(e)
 	}
 }
 
-func getServiceDefinition(httpClient *http.Client) (services services) {
-	resp, err := httpClient.Get(*servicesDefinitionFileUri)
+type httpServiceDefinitionClient struct {
+	httpClient *http.Client
+}
+
+func (hsdc *httpServiceDefinitionClient) servicesDefinition() (services services) {
+	resp, err := hsdc.httpClient.Get(*servicesDefinitionFileUri)
 	check(err)
 	defer resp.Body.Close()
 
@@ -52,6 +61,25 @@ func getServiceDefinition(httpClient *http.Client) (services services) {
 	err = yaml.Unmarshal(serviceYaml, &services)
 	check(err)
 	return services
+}
+
+func (hsdc *httpServiceDefinitionClient) renderedServiceFile(name string, context ...interface{}) (string, error) {
+	resp, err := hsdc.httpClient.Get(fmt.Sprintf("%s%s", *serviceFilesUri, name))
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	serviceTemplate, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	tmpl, err := mustache.ParseString(string(serviceTemplate))
+	if err != nil {
+		return "", err
+	}
+	return tmpl.Render(context...), nil
 }
 
 func main() {
@@ -70,12 +98,12 @@ func main() {
 
 	d, err := newDeployer()
 	check(err)
-	
+
 	for {
-	err = d.deployAll()
-	check(err)
-        time.Sleep(time.Duration(*intervalInSecondsBetweenDeploys) * time.Second)
-    }
+		err = d.deployAll()
+		check(err)
+		time.Sleep(time.Duration(*intervalInSecondsBetweenDeploys) * time.Second)
+	}
 }
 
 func (d *deployer) deployUnit(wantedUnit *schema.Unit) error {
@@ -200,10 +228,15 @@ func (api noDestroyFleetAPI) DestroyUnit(name string) error {
 	return nil
 }
 
-func newDeployer() (deployer, error) {
+type deployer struct {
+	fleetapi                client.API
+	serviceDefinitionClient serviceDefinitionClient
+}
+
+func newDeployer() (*deployer, error) {
 	u, err := url.Parse(*fleetEndpoint)
 	if err != nil {
-		return deployer{}, err
+		return &deployer{}, err
 	}
 	httpClient := &http.Client{}
 
@@ -225,29 +258,25 @@ func newDeployer() (deployer, error) {
 
 	}
 
-	hc, err := client.NewHTTPClient(httpClient, *u)
+	fleetHttpApiClient, err := client.NewHTTPClient(httpClient, *u)
 	if err != nil {
-		return deployer{}, err
+		return &deployer{}, err
 	}
-	hc = loggingFleetAPI{hc}
+	fleetHttpApiClient = loggingFleetAPI{fleetHttpApiClient}
 	if !*destroyFlag {
 		log.Println("destroy not enabled (use -destroy to enable)")
-		hc = noDestroyFleetAPI{hc}
+		fleetHttpApiClient = noDestroyFleetAPI{fleetHttpApiClient}
 	}
-	return deployer{httpClient, hc}, nil
-}
-
-type deployer struct {
-	httpClient *http.Client
-	fleetapi   client.API
+	serviceDefinitionClient := &httpServiceDefinitionClient{httpClient: &http.Client{}}
+	return &deployer{fleetapi: fleetHttpApiClient, serviceDefinitionClient: serviceDefinitionClient}, nil
 }
 
 func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, error) {
 	units := make(map[string]*schema.Unit)
-	for _, srv := range getServiceDefinition(d.httpClient).Services {
+	for _, srv := range d.serviceDefinitionClient.servicesDefinition().Services {
 		vars := make(map[string]interface{})
 		vars["version"] = srv.Version
-		serviceFile, err := d.renderServiceFile(srv.Name, vars)
+		serviceFile, err := d.serviceDefinitionClient.renderedServiceFile(srv.Name, vars)
 		if err != nil {
 			return nil, err
 		}
@@ -258,17 +287,14 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, error) {
 			return nil, err
 		}
 
-		if srv.Count == 0 {
+		if srv.Count == 0 && !strings.Contains(srv.Name, "@") {
 			u := &schema.Unit{
 				Name:    srv.Name,
 				Options: schema.MapUnitFileToSchemaUnitOptions(uf),
 			}
 
 			units[srv.Name] = u
-		} else {
-			if !strings.Contains(srv.Name, "@") {
-				return nil, errors.New("instances specified on non-template service file")
-			}
+		} else if srv.Count > 0 && strings.Contains(srv.Name, "@") {
 			for i := 0; i < srv.Count; i++ {
 				xName := strings.Replace(srv.Name, "@", fmt.Sprintf("@%d", i+1), -1)
 
@@ -279,6 +305,9 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, error) {
 
 				units[u.Name] = u
 			}
+		} else {
+			log.Printf("WARNING skipping service: %s, incorrect service definition", srv.Name)
+			//return nil, errors.New("instances specified on non-template service file")
 		}
 	}
 	return units, nil
@@ -295,23 +324,4 @@ func (d *deployer) buildCurrentUnits() (map[string]*schema.Unit, error) {
 		units[u.Name] = u
 	}
 	return units, nil
-}
-
-func (d *deployer) renderServiceFile(name string, context ...interface{}) (string, error) {
-	resp, err := d.httpClient.Get(fmt.Sprintf("%s%s", *serviceFilesUri, name))
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	serviceTemplate, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	tmpl, err := mustache.ParseString(string(serviceTemplate))
-	if err != nil {
-		return "", err
-	}
-	return tmpl.Render(context...), nil
 }
