@@ -2,11 +2,12 @@ package main
 
 import (
 	"gopkg.in/yaml.v2"
-	"net/http"
 	"testing"
 )
 
-func mockServiceDefinitionGetter(httpClient *http.Client) (services services) {
+type mockServiceDefinitionClient struct{}
+
+func (msdc *mockServiceDefinitionClient) servicesDefinition() (services services) {
 	serviceYaml := []byte(`---
 services:
   - name: mongodb@.service
@@ -24,12 +25,9 @@ services:
     version: latest`)
 	yaml.Unmarshal(serviceYaml, &services)
 	return services
-
 }
 
-type sfr struct{}
-
-func (sfr *sfr) renderServiceFile(name string, context ...interface{}) (string, error) {
+func (msdc *mockServiceDefinitionClient) renderedServiceFile(name string, context ...interface{}) (string, error) {
 	return `[Unit]
 Description=Deployer
 
@@ -44,9 +42,9 @@ ExecStop=/usr/bin/docker stop -t 3 %p-%i
 }
 
 func TestBuildWantedUnits(t *testing.T) {
-	sfr := &sfr{}
-	d, err := newDeployer(mockServiceDefinitionGetter)
-	wantedUnits, err := d.buildWantedUnits(sfr)
+	mockServiceDefinitionClient := &mockServiceDefinitionClient{}
+	d := &deployer{serviceDefinitionClient: mockServiceDefinitionClient}
+	wantedUnits, err := d.buildWantedUnits()
 	if err != nil {
 		t.Errorf("wanted units threw an error: %v", err)
 	}
