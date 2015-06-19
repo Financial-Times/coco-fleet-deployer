@@ -121,9 +121,7 @@ func (d *deployer) deployUnit(wantedUnit *schema.Unit) error {
 
 	wuf := schema.MapSchemaUnitOptionsToUnitFile(wantedUnit.Options)
 	cuf := schema.MapSchemaUnitOptionsToUnitFile(currentUnit.Options)
-	wufUnescapedString := strings.Replace(wuf.String(), "\\\n", "", -1)
-	if strings.Replace(wufUnescapedString, " ", "", -1) != strings.Replace(cuf.String(), " ", "", -1) {
-
+	if wuf.Hash() != cuf.Hash() {
 		log.Printf("Service %s differs from the cluster version", wantedUnit.Name)
 		wantedUnit.DesiredState = "inactive"
 		err := d.fleetapi.CreateUnit(wantedUnit)
