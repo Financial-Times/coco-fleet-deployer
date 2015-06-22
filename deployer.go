@@ -1,7 +1,6 @@
 package main
 
 import (
-	_ "errors"
 	"flag"
 	"fmt"
 	"github.com/coreos/fleet/client"
@@ -305,7 +304,6 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, error) {
 			}
 		} else {
 			log.Printf("WARNING skipping service: %s, incorrect service definition", srv.Name)
-			//return nil, errors.New("instances specified on non-template service file")
 		}
 	}
 	return units, nil
