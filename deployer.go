@@ -99,9 +99,11 @@ func main() {
 	check(err)
 
 	for {
+		log.Printf("INFO Starting deploy run")
 		err = d.deployAll()
 		check(err)
 		time.Sleep(time.Duration(*intervalInSecondsBetweenDeploys) * time.Second)
+		log.Printf("INFO Finished deploy run")
 	}
 }
 
@@ -121,9 +123,13 @@ func (d *deployer) deployUnit(wantedUnit *schema.Unit) error {
 	wuf := schema.MapSchemaUnitOptionsToUnitFile(wantedUnit.Options)
 	cuf := schema.MapSchemaUnitOptionsToUnitFile(currentUnit.Options)
 	if wuf.Hash() != cuf.Hash() {
-		log.Printf("Service %s differs from the cluster version", wantedUnit.Name)
+		log.Printf("INFO Service %s differs from the cluster version", wantedUnit.Name)
 		wantedUnit.DesiredState = "inactive"
-		err := d.fleetapi.CreateUnit(wantedUnit)
+		err = d.fleetapi.DestroyUnit(wantedUnit.Name)
+		if err != nil {
+			return err
+		}
+		err = d.fleetapi.CreateUnit(wantedUnit)
 		if err != nil {
 			return err
 		}
@@ -202,17 +208,17 @@ type loggingFleetAPI struct {
 }
 
 func (lapi loggingFleetAPI) CreateUnit(unit *schema.Unit) error {
-	log.Printf("Creating or updating unit %s\n", unit.Name)
+	log.Printf("INFO Creating or updating unit %s\n", unit.Name)
 	return lapi.API.CreateUnit(unit)
 }
 
 func (lapi loggingFleetAPI) DestroyUnit(unit string) error {
-	log.Printf("Destroying unit %s\n", unit)
+	log.Printf("INFO Destroying unit %s\n", unit)
 	return lapi.API.DestroyUnit(unit)
 }
 
 func (lapi loggingFleetAPI) SetUnitTargetState(name, desiredState string) error {
-	log.Printf("Setting target state for %s to %s\n", name, desiredState)
+	log.Printf("INFO Setting target state for %s to %s\n", name, desiredState)
 	return lapi.API.SetUnitTargetState(name, desiredState)
 }
 
