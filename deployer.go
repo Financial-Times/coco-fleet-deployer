@@ -6,7 +6,6 @@ import (
 	"github.com/coreos/fleet/client"
 	"github.com/coreos/fleet/schema"
 	"github.com/coreos/fleet/unit"
-	"github.com/hoisie/mustache"
 	"golang.org/x/net/proxy"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
@@ -39,7 +38,7 @@ type service struct {
 
 type serviceDefinitionClient interface {
 	servicesDefinition() (services services)
-	renderedServiceFile(name string, context ...interface{}) (string, error)
+	serviceFile(name string) ([]byte, error)
 }
 
 func check(e error) {
@@ -64,23 +63,24 @@ func (hsdc *httpServiceDefinitionClient) servicesDefinition() (services services
 	return services
 }
 
-func (hsdc *httpServiceDefinitionClient) renderedServiceFile(name string, context ...interface{}) (string, error) {
+func (hsdc *httpServiceDefinitionClient) serviceFile(name string) ([]byte, error) {
 	resp, err := hsdc.httpClient.Get(fmt.Sprintf("%s%s", *serviceFilesUri, name))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	serviceTemplate, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
+	return serviceTemplate, nil
+}
 
-	tmpl, err := mustache.ParseString(string(serviceTemplate))
-	if err != nil {
-		return "", err
-	}
-	return tmpl.Render(context...), nil
+func renderedServiceFile(serviceTemplate []byte, context map[string]interface{}) (string, error) {
+	version_string := fmt.Sprintf("DOCKER_APP_VERSION=%s", context["version"])
+	serviceTemplateString := strings.Replace(string(serviceTemplate), "DOCKER_APP_VERSION=latest", version_string, 1)
+	return serviceTemplateString, nil
 }
 
 func main() {
@@ -281,8 +281,12 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, error) {
 	units := make(map[string]*schema.Unit)
 	for _, srv := range d.serviceDefinitionClient.servicesDefinition().Services {
 		vars := make(map[string]interface{})
+		serviceTemplate, err := d.serviceDefinitionClient.serviceFile(srv.Name)
+		if err != nil {
+			return nil, err
+		}
 		vars["version"] = srv.Version
-		serviceFile, err := d.serviceDefinitionClient.renderedServiceFile(srv.Name, vars)
+		serviceFile, err := renderedServiceFile(serviceTemplate, vars)
 		if err != nil {
 			return nil, err
 		}
