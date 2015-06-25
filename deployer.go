@@ -78,6 +78,9 @@ func (hsdc *httpServiceDefinitionClient) serviceFile(name string) ([]byte, error
 }
 
 func renderedServiceFile(serviceTemplate []byte, context map[string]interface{}) (string, error) {
+	if context["version"] == "" {
+		return string(serviceTemplate), nil
+	}
 	version_string := fmt.Sprintf("DOCKER_APP_VERSION=%s", context["version"])
 	serviceTemplateString := strings.Replace(string(serviceTemplate), "DOCKER_APP_VERSION=latest", version_string, 1)
 	return serviceTemplateString, nil

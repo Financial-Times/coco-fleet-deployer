@@ -31,7 +31,6 @@ services:
     version: latest
     count: 3
   - name: mongodb-configurator.service
-    version: latest
   - name: annotations-api@.service 
     version: latest
     count: 1
