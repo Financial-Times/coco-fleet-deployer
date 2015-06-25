@@ -6,7 +6,6 @@ import (
 	"github.com/coreos/fleet/client"
 	"github.com/coreos/fleet/schema"
 	"github.com/coreos/fleet/unit"
-	"github.com/hoisie/mustache"
 	"golang.org/x/net/proxy"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
@@ -18,12 +17,14 @@ import (
 	"time"
 )
 
-var destroyFlag = flag.Bool("destroy", false, "Destroy units not found in the definition")
-var fleetEndpoint = flag.String("fleetEndpoint", "", "Fleet API http endpoint: `http://host:port`")
-var serviceFilesUri = flag.String("serviceFilesUri", "", "URI directory that contains service files: `https://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/`")
-var servicesDefinitionFileUri = flag.String("servicesDefinitionFileUri", "", "URI file that contains services definition: `https://raw.githubusercontent.com/Financial-Times/fleet/master/services.yaml`")
-var intervalInSecondsBetweenDeploys = flag.Int("intervalInSecondsBetweenDeploys", 600, "Interval in seconds between deploys")
-var socksProxy = flag.String("socksProxy", "", "address of socks proxy, e.g., 127.0.0.1:9050")
+var (
+	destroyFlag                     = flag.Bool("destroy", false, "Destroy units not found in the definition")
+	fleetEndpoint                   = flag.String("fleetEndpoint", "", "Fleet API http endpoint: `http://host:port`")
+	serviceFilesUri                 = flag.String("serviceFilesUri", "", "URI directory that contains service files: `https://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/`")
+	servicesDefinitionFileUri       = flag.String("servicesDefinitionFileUri", "", "URI file that contains services definition: `https://raw.githubusercontent.com/Financial-Times/fleet/master/services.yaml`")
+	intervalInSecondsBetweenDeploys = flag.Int("intervalInSecondsBetweenDeploys", 600, "Interval in seconds between deploys")
+	socksProxy                      = flag.String("socksProxy", "", "address of socks proxy, e.g., 127.0.0.1:9050")
+)
 
 type services struct {
 	Services []service `yaml:"services"`
@@ -37,7 +38,7 @@ type service struct {
 
 type serviceDefinitionClient interface {
 	servicesDefinition() (services services)
-	renderedServiceFile(name string, context ...interface{}) (string, error)
+	serviceFile(name string) ([]byte, error)
 }
 
 func check(e error) {
@@ -62,23 +63,24 @@ func (hsdc *httpServiceDefinitionClient) servicesDefinition() (services services
 	return services
 }
 
-func (hsdc *httpServiceDefinitionClient) renderedServiceFile(name string, context ...interface{}) (string, error) {
+func (hsdc *httpServiceDefinitionClient) serviceFile(name string) ([]byte, error) {
 	resp, err := hsdc.httpClient.Get(fmt.Sprintf("%s%s", *serviceFilesUri, name))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	serviceTemplate, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
+	return serviceTemplate, nil
+}
 
-	tmpl, err := mustache.ParseString(string(serviceTemplate))
-	if err != nil {
-		return "", err
-	}
-	return tmpl.Render(context...), nil
+func renderedServiceFile(serviceTemplate []byte, context map[string]interface{}) (string, error) {
+	version_string := fmt.Sprintf("DOCKER_APP_VERSION=%s", context["version"])
+	serviceTemplateString := strings.Replace(string(serviceTemplate), "DOCKER_APP_VERSION=latest", version_string, 1)
+	return serviceTemplateString, nil
 }
 
 func main() {
@@ -166,6 +168,7 @@ func (d *deployer) launchAll() error {
 	// start everything that's not started
 	for _, u := range currentUnits {
 		if u.CurrentState != "launched" {
+			log.Printf("INFO Current state: %s", u.CurrentState)
 			err := d.fleetapi.SetUnitTargetState(u.Name, "launched")
 			if err != nil {
 				return err
@@ -281,8 +284,12 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, error) {
 	units := make(map[string]*schema.Unit)
 	for _, srv := range d.serviceDefinitionClient.servicesDefinition().Services {
 		vars := make(map[string]interface{})
+		serviceTemplate, err := d.serviceDefinitionClient.serviceFile(srv.Name)
+		if err != nil {
+			return nil, err
+		}
 		vars["version"] = srv.Version
-		serviceFile, err := d.serviceDefinitionClient.renderedServiceFile(srv.Name, vars)
+		serviceFile, err := renderedServiceFile(serviceTemplate, vars)
 		if err != nil {
 			return nil, err
 		}
