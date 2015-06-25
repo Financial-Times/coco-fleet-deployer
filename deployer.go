@@ -144,9 +144,12 @@ func (d *deployer) destroyUnwanted(wantedUnits map[string]*schema.Unit) error {
 	}
 	for _, u := range currentUnits {
 		if wantedUnits[u.Name] == nil {
-			err := d.fleetapi.DestroyUnit(u.Name)
-			if err != nil {
-				return err
+			//Do not destroy the deployer itself
+			if u.Name != "deployer.service" {
+				err := d.fleetapi.DestroyUnit(u.Name)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
