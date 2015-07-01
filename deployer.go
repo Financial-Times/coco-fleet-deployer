@@ -41,25 +41,24 @@ type serviceDefinitionClient interface {
 	serviceFile(name string) ([]byte, error)
 }
 
-func check(e error) {
-	if e != nil {
-		panic(e)
-	}
-}
-
 type httpServiceDefinitionClient struct {
 	httpClient *http.Client
 }
 
 func (hsdc *httpServiceDefinitionClient) servicesDefinition() (services services) {
 	resp, err := hsdc.httpClient.Get(*servicesDefinitionFileUri)
-	check(err)
+	if err != nil {
+		panic(err)
+	}
 	defer resp.Body.Close()
 
 	serviceYaml, err := ioutil.ReadAll(resp.Body)
-	check(err)
-	err = yaml.Unmarshal(serviceYaml, &services)
-	check(err)
+	if err != nil {
+		panic(err)
+	}
+	if err := yaml.Unmarshal(serviceYaml, &services); err != nil {
+		panic(err)
+	}
 	return services
 }
 
@@ -101,12 +100,15 @@ func main() {
 	}
 
 	d, err := newDeployer()
-	check(err)
+	if err != nil {
+		panic(err)
+	}
 
 	for {
 		log.Printf("INFO Starting deploy run")
-		err = d.deployAll()
-		check(err)
+		if err := d.deployAll(); err != nil {
+			panic(err)
+		}
 		time.Sleep(time.Duration(*intervalInSecondsBetweenDeploys) * time.Second)
 		log.Printf("INFO Finished deploy run")
 	}
