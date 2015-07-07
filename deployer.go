@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"runtime/debug"
 	"strings"
 	"time"
 )
@@ -106,11 +107,21 @@ func main() {
 
 	for {
 		log.Printf("INFO Starting deploy run")
-		if err := d.deployAll(); err != nil {
-			panic(err)
-		}
+		deployAndRecover(d)
 		time.Sleep(time.Duration(*intervalInSecondsBetweenDeploys) * time.Second)
 		log.Printf("INFO Finished deploy run")
+	}
+}
+
+func deployAndRecover(d *deployer) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("ERROR Recovered: %s: %s", r, debug.Stack())
+		}
+	}()
+
+	if err := d.deployAll(); err != nil {
+		panic(err)
 	}
 }
 
