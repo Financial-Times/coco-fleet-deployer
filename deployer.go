@@ -18,12 +18,11 @@ import (
 )
 
 var (
-	destroyFlag                     = flag.Bool("destroy", false, "Destroy units not found in the definition")
-	fleetEndpoint                   = flag.String("fleetEndpoint", "", "Fleet API http endpoint: `http://host:port`")
-	serviceFilesUri                 = flag.String("serviceFilesUri", "", "URI directory that contains service files: `https://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/`")
-	servicesDefinitionFileUri       = flag.String("servicesDefinitionFileUri", "", "URI file that contains services definition: `https://raw.githubusercontent.com/Financial-Times/fleet/master/services.yaml`")
-	intervalInSecondsBetweenDeploys = flag.Int("intervalInSecondsBetweenDeploys", 600, "Interval in seconds between deploys")
-	socksProxy                      = flag.String("socksProxy", "", "address of socks proxy, e.g., 127.0.0.1:9050")
+	destroyFlag               = flag.Bool("destroy", false, "Destroy units not found in the definition")
+	fleetEndpoint             = flag.String("fleetEndpoint", "", "Fleet API http endpoint: `http://host:port`")
+	serviceFilesUri           = flag.String("serviceFilesUri", "", "URI directory that contains service files: `https://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/`")
+	servicesDefinitionFileUri = flag.String("servicesDefinitionFileUri", "", "URI file that contains services definition: `https://raw.githubusercontent.com/Financial-Times/fleet/master/services.yaml`")
+	socksProxy                = flag.String("socksProxy", "", "address of socks proxy, e.g., 127.0.0.1:9050")
 )
 
 type services struct {
@@ -104,14 +103,11 @@ func main() {
 		panic(err)
 	}
 
-	for {
-		log.Printf("INFO Starting deploy run")
-		if err := d.deployAll(); err != nil {
-			panic(err)
-		}
-		time.Sleep(time.Duration(*intervalInSecondsBetweenDeploys) * time.Second)
-		log.Printf("INFO Finished deploy run")
+	log.Printf("INFO Starting deploy run")
+	if err := d.deployAll(); err != nil {
+		panic(err)
 	}
+	log.Printf("INFO Finished deploy run")
 }
 
 func (d *deployer) deployUnit(wantedUnit *schema.Unit) error {
