@@ -23,6 +23,7 @@ services:
     version: latest`)
 
 var goodServiceYaml = []byte(`---
+serviceFilesUri: https://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/
 services:
   - name: mongodb@.service
     version: latest
@@ -59,7 +60,7 @@ func (msdc *mockBadServiceDefinitionClient) servicesDefinition() (services servi
 	return services
 }
 
-func (msdc *mockBadServiceDefinitionClient) serviceFile(name string) ([]byte, error) {
+func (msdc *mockBadServiceDefinitionClient) serviceFile(serviceFilesUri string, name string) ([]byte, error) {
 	return goodServiceFileString, nil
 }
 
@@ -70,7 +71,7 @@ func (msdc *mockGoodServiceDefinitionClient) servicesDefinition() (services serv
 	return services
 }
 
-func (msdc *mockGoodServiceDefinitionClient) serviceFile(name string) ([]byte, error) {
+func (msdc *mockGoodServiceDefinitionClient) serviceFile(serviceFilesUri string, name string) ([]byte, error) {
 	return goodServiceFileString, nil
 }
 
