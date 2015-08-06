@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"github.com/coreos/fleet/client"
@@ -37,7 +38,7 @@ type service struct {
 }
 
 type serviceDefinitionClient interface {
-	servicesDefinition() (services services)
+	servicesDefinition() (services, error)
 	serviceFile(serviceFilesUri string, name string) ([]byte, error)
 }
 
@@ -46,14 +47,17 @@ type httpServiceDefinitionClient struct {
 	serviceFilesUri string
 }
 
-func renderServiceDefinitionYaml(serviceYaml []byte) (services services) {
-	if err := yaml.Unmarshal(serviceYaml, &services); err != nil {
+func renderServiceDefinitionYaml(serviceYaml []byte) (services services, err error) {
+	if err = yaml.Unmarshal(serviceYaml, &services); err != nil {
 		panic(err)
 	}
-	return services
+	if services.ServiceFilesUri == "" {
+		err = errors.New("empty service files uri")
+	}
+	return
 }
 
-func (hsdc *httpServiceDefinitionClient) servicesDefinition() (services services) {
+func (hsdc *httpServiceDefinitionClient) servicesDefinition() (services, error) {
 	resp, err := hsdc.httpClient.Get(*servicesDefinitionFileUri)
 	if err != nil {
 		panic(err)
@@ -297,7 +301,10 @@ func newDeployer() (*deployer, error) {
 
 func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, error) {
 	units := make(map[string]*schema.Unit)
-	servicesDefinition := d.serviceDefinitionClient.servicesDefinition()
+	servicesDefinition, err := d.serviceDefinitionClient.servicesDefinition()
+	if err != nil {
+		return nil, err
+	}
 	serviceFilesUri := servicesDefinition.ServiceFilesUri
 	for _, srv := range servicesDefinition.Services {
 		vars := make(map[string]interface{})

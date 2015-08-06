@@ -55,9 +55,9 @@ ExecStop=/usr/bin/docker stop -t 3 %p-%i`)
 
 type mockBadServiceDefinitionClient struct{}
 
-func (msdc *mockBadServiceDefinitionClient) servicesDefinition() (services services) {
-	yaml.Unmarshal(badServiceYaml, &services)
-	return services
+func (msdc *mockBadServiceDefinitionClient) servicesDefinition() (services services, err error) {
+	err = yaml.Unmarshal(badServiceYaml, &services)
+	return
 }
 
 func (msdc *mockBadServiceDefinitionClient) serviceFile(serviceFilesUri string, name string) ([]byte, error) {
@@ -66,9 +66,9 @@ func (msdc *mockBadServiceDefinitionClient) serviceFile(serviceFilesUri string, 
 
 type mockGoodServiceDefinitionClient struct{}
 
-func (msdc *mockGoodServiceDefinitionClient) servicesDefinition() (services services) {
-	yaml.Unmarshal(goodServiceYaml, &services)
-	return services
+func (msdc *mockGoodServiceDefinitionClient) servicesDefinition() (services services, err error) {
+	err = yaml.Unmarshal(goodServiceYaml, &services)
+	return
 }
 
 func (msdc *mockGoodServiceDefinitionClient) serviceFile(serviceFilesUri string, name string) ([]byte, error) {
