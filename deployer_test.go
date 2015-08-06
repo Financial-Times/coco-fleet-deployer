@@ -118,3 +118,38 @@ func TestRenderServiceFile(t *testing.T) {
 		t.Errorf("Service file didn't render properly\n%s", serviceFile)
 	}
 }
+
+func TestMissingServiceFileUri(t *testing.T) {
+	input := []byte(`---
+services:
+  - name: mongodb@.service
+    version: latest
+    count: 3
+`)
+
+	_, err := renderServiceDefinitionYaml(input)
+	if err == nil {
+		t.Error("expected error due to missing service file uri")
+	}
+
+}
+
+func TestGoodServiceFileUri(t *testing.T) {
+	input := []byte(`---
+serviceFilesUri: http://foo.bar
+services:
+  - name: mongodb@.service
+    version: latest
+    count: 3
+`)
+
+	s, err := renderServiceDefinitionYaml(input)
+	if err != nil {
+		t.Errorf("unexpected error %v", err)
+	}
+
+	if s.ServiceFilesUri != "http://foo.bar" {
+		t.Errorf("service file uri didn't match. expected http://foo.bar but got %v", s.ServiceFilesUri)
+	}
+
+}
