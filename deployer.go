@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"github.com/coreos/fleet/client"
@@ -27,19 +26,19 @@ var (
 )
 
 type services struct {
-	Services        []service `yaml:"services"`
-	ServiceFilesUri string    `yaml:"serviceFilesUri"`
+	Services []service `yaml:"services"`
 }
 
 type service struct {
 	Name    string `yaml:"name"`
 	Version string `yaml:"version"`
 	Count   int    `yaml:"count"`
+	Uri     string `yaml:"uri"`
 }
 
 type serviceDefinitionClient interface {
 	servicesDefinition() (services, error)
-	serviceFile(serviceFilesUri string, name string) ([]byte, error)
+	serviceFile(serviceFileUri string) ([]byte, error)
 }
 
 type httpServiceDefinitionClient struct {
@@ -50,9 +49,6 @@ type httpServiceDefinitionClient struct {
 func renderServiceDefinitionYaml(serviceYaml []byte) (services services, err error) {
 	if err = yaml.Unmarshal(serviceYaml, &services); err != nil {
 		panic(err)
-	}
-	if services.ServiceFilesUri == "" {
-		err = errors.New("empty service files uri")
 	}
 	return
 }
@@ -71,8 +67,8 @@ func (hsdc *httpServiceDefinitionClient) servicesDefinition() (services, error) 
 	return renderServiceDefinitionYaml(serviceYaml)
 }
 
-func (hsdc *httpServiceDefinitionClient) serviceFile(serviceFilesUri string, name string) ([]byte, error) {
-	resp, err := hsdc.httpClient.Get(fmt.Sprintf("%s%s", serviceFilesUri, name))
+func (hsdc *httpServiceDefinitionClient) serviceFile(serviceFileUri string) ([]byte, error) {
+	resp, err := hsdc.httpClient.Get(serviceFileUri)
 	if err != nil {
 		return nil, err
 	}
@@ -305,12 +301,15 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, error) {
 	if err != nil {
 		return nil, err
 	}
-	serviceFilesUri := servicesDefinition.ServiceFilesUri
 	for _, srv := range servicesDefinition.Services {
 		vars := make(map[string]interface{})
-		serviceTemplate, err := d.serviceDefinitionClient.serviceFile(serviceFilesUri, srv.Name)
+		if srv.Uri == "" {
+			log.Printf("WARNING no uri for service: %s", srv.Name)
+			continue
+		}
+		serviceTemplate, err := d.serviceDefinitionClient.serviceFile(srv.Uri)
 		if err != nil {
-			return nil, err
+			continue
 		}
 		vars["version"] = srv.Version
 		serviceFile, err := renderedServiceFile(serviceTemplate, vars)

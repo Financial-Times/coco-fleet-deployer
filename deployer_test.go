@@ -23,23 +23,25 @@ services:
     version: latest`)
 
 var goodServiceYaml = []byte(`---
-serviceFilesUri: https://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/
 services:
   - name: mongodb@.service
+    uri: https://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/mongodb@.service
     version: latest
     count: 3
   - name: mongodb-sidekick@.service
+    uri: https://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/mongodb-sidekick@.service
     version: latest
     count: 3
   - name: mongodb-configurator.service
+    uri: https://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/mongodb-configurator.service
   - name: annotations-api@.service 
+    uri: https://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/annotations-api@.service
     version: latest
     count: 1
   - name: annotations-api-sidekick@.service 
+    uri: https://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/annotations-api-sidekick@.service
     version: latest
-    count: 1
-  - name: mongodb-configurator.service
-    version: latest`)
+    count: 1`)
 
 var goodServiceFileString = []byte(`[Unit]
 Description=Deployer
@@ -60,7 +62,7 @@ func (msdc *mockBadServiceDefinitionClient) servicesDefinition() (services servi
 	return
 }
 
-func (msdc *mockBadServiceDefinitionClient) serviceFile(serviceFilesUri string, name string) ([]byte, error) {
+func (msdc *mockBadServiceDefinitionClient) serviceFile(serviceFileUri string) ([]byte, error) {
 	return goodServiceFileString, nil
 }
 
@@ -71,7 +73,7 @@ func (msdc *mockGoodServiceDefinitionClient) servicesDefinition() (services serv
 	return
 }
 
-func (msdc *mockGoodServiceDefinitionClient) serviceFile(serviceFilesUri string, name string) ([]byte, error) {
+func (msdc *mockGoodServiceDefinitionClient) serviceFile(serviceFileUri string) ([]byte, error) {
 	return goodServiceFileString, nil
 }
 
@@ -88,6 +90,9 @@ func TestBuildWantedUnitsBad(t *testing.T) {
 	if wantedUnits["annotations-api-sidekick@.service"] != nil {
 		t.Fatalf("Scheduled a '@' unit without a count")
 	}
+	if len(wantedUnits) != 0 {
+		t.Fatalf("No services should've been loaded, loaded: %d", len(wantedUnits))
+	}
 
 	t.Logf("Passed with wanted units: %v", wantedUnits)
 }
@@ -101,6 +106,9 @@ func TestBuildWantedUnitsGood(t *testing.T) {
 	}
 	if wantedUnits["mongodb-configurator.service"] == nil {
 		t.Fatalf("Didn't load a service without a count")
+	}
+	if len(wantedUnits) != 9 {
+		t.Fatalf("Didn't load all services, loaded: %d", len(wantedUnits))
 	}
 
 	t.Logf("Passed with wanted units: %v", wantedUnits)
@@ -117,39 +125,4 @@ func TestRenderServiceFile(t *testing.T) {
 	if !strings.Contains(serviceFile, vars["version"].(string)) {
 		t.Errorf("Service file didn't render properly\n%s", serviceFile)
 	}
-}
-
-func TestMissingServiceFileUri(t *testing.T) {
-	input := []byte(`---
-services:
-  - name: mongodb@.service
-    version: latest
-    count: 3
-`)
-
-	_, err := renderServiceDefinitionYaml(input)
-	if err == nil {
-		t.Error("expected error due to missing service file uri")
-	}
-
-}
-
-func TestGoodServiceFileUri(t *testing.T) {
-	input := []byte(`---
-serviceFilesUri: http://foo.bar
-services:
-  - name: mongodb@.service
-    version: latest
-    count: 3
-`)
-
-	s, err := renderServiceDefinitionYaml(input)
-	if err != nil {
-		t.Errorf("unexpected error %v", err)
-	}
-
-	if s.ServiceFilesUri != "http://foo.bar" {
-		t.Errorf("service file uri didn't match. expected http://foo.bar but got %v", s.ServiceFilesUri)
-	}
-
 }
