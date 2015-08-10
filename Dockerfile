@@ -1,5 +1,4 @@
-from golang
-
-RUN go get github.com/Financial-Times/coco-fleet-deployer
-CMD $GOPATH/bin/coco-fleet-deployer -fleetEndpoint=$FLEET_ENDPOINT -serviceFilesUri=$SERVICE_FILES_URI -servicesDefinitionFileUri=$SERVICES_DEFINITION_FILE_URI -destroy=$DESTROY
+FROM gliderlabs/alpine:3.1
+ADD coco-fleet-deployer /coco-fleet-deployer
+CMD /coco-fleet-deployer -fleetEndpoint=$FLEET_ENDPOINT -servicesDefinitionFileUri=$SERVICES_DEFINITION_FILE_URI -destroy=$DESTROY
 
