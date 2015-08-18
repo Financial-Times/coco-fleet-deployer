@@ -1,9 +1,12 @@
 FROM gliderlabs/alpine:3.2
 
+ADD . /fleet-deployer
 RUN apk --update add go git\
   && export GOPATH=/.gopath \
   && go get github.com/Financial-Times/coco-fleet-deployer \
-  && go build github.com/Financial-Times/coco-fleet-deployer \
+  && cd fleet-deployer \
+  && go build \
+  && mv fleet-deployer /coco-fleet-deployer \
   && apk del go git \
   && rm -rf $GOPATH /var/cache/apk/*
 
