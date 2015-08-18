@@ -192,8 +192,8 @@ func (d *deployer) launchAll() error {
 
 	// start everything that's not started
 	for _, u := range currentUnits {
-		if u.CurrentState != "launched" {
-			log.Printf("INFO Current state: %s", u.CurrentState)
+		if u.DesiredState != "launched" {
+			log.Printf("INFO Desired state: %s", u.DesiredState)
 			err := d.fleetapi.SetUnitTargetState(u.Name, "launched")
 			if err != nil {
 				return err
