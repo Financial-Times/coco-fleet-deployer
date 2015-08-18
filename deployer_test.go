@@ -19,6 +19,9 @@ services:
   - name: annotations-api@.service 
     version: latest
     count: 0
+  - name: bad-syntax.service 
+    uri: bad-syntax.service
+    version: latest
   - name: annotations-api-sidekick@.service 
     version: latest`)
 
@@ -55,6 +58,19 @@ ExecStartPre=/usr/bin/docker pull coco/coco-fleet-deployer:$DOCKER_APP_VESRION
 ExecStart=/bin/bash -c "docker run --rm --name %p-%i --env=\"FLEET_ENDPOINT=http://$HOSTNAME:49153\" --env=\"SERVICE_FILES_URI=https://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/\" --env=\"SERVICES_DEFINITION_FILE_URI=https://raw.githubusercontent.com/Financial-Times/fleet/master/services.yaml\" --env=\"INTERVAL_IN_SECONDS_BETWEEN_DEPLOYS=60\" --env=\"DESTROY=false\" coco/coco-fleet-deployer:$DOCKER_APP_VESRION"
 ExecStop=/usr/bin/docker stop -t 3 %p-%i`)
 
+var badServiceFileString = []byte(`[Unit]
+Description=Deployer
+
+[Service]
+Environment="DOCKER_APP_VERSION=latest"
+TimeoutStartSec=600
+ExecStartPre=-/usr/bin/docker kill %p-%i
+ExecStartPre=-/usr/bin/docker rm %p-%i
+<<<<<<<<<
+ExecStartPre=/usr/bin/docker pull coco/coco-fleet-deployer:$DOCKER_APP_VESRION
+ExecStart=/bin/bash -c "docker run --rm --name %p-%i --env=\"FLEET_ENDPOINT=http://$HOSTNAME:49153\" --env=\"SERVICE_FILES_URI=https://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/\" --env=\"SERVICES_DEFINITION_FILE_URI=https://raw.githubusercontent.com/Financial-Times/fleet/master/services.yaml\" --env=\"INTERVAL_IN_SECONDS_BETWEEN_DEPLOYS=60\" --env=\"DESTROY=false\" coco/coco-fleet-deployer:$DOCKER_APP_VESRION"
+ExecStop=/usr/bin/docker stop -t 3 %p-%i`)
+
 type mockBadServiceDefinitionClient struct{}
 
 func (msdc *mockBadServiceDefinitionClient) servicesDefinition() (services services, err error) {
@@ -63,6 +79,9 @@ func (msdc *mockBadServiceDefinitionClient) servicesDefinition() (services servi
 }
 
 func (msdc *mockBadServiceDefinitionClient) serviceFile(serviceFileUri string) ([]byte, error) {
+	if serviceFileUri == "bad-syntax.service" {
+		return badServiceFileString, nil
+	}
 	return goodServiceFileString, nil
 }
 

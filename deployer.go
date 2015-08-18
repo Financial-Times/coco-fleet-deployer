@@ -258,7 +258,7 @@ type noDestroyFleetAPI struct {
 }
 
 func (api noDestroyFleetAPI) DestroyUnit(name string) error {
-	log.Printf("skipping destroying for unit %v\n", name)
+	log.Printf("INFO skipping destroying for unit %v\n", name)
 	return nil
 }
 
@@ -330,7 +330,9 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, error) {
 		// fleet deploy
 		uf, err := unit.NewUnitFile(serviceFile)
 		if err != nil {
-			return nil, err
+			//Broken service file, skip it and continue
+			log.Printf("WARNING: service file %s is incorrect, check syntax [SKIPPING]", srv.Name)
+			continue
 		}
 
 		if srv.Count == 0 && !strings.Contains(srv.Name, "@") {
