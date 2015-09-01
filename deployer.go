@@ -23,7 +23,7 @@ var (
 	fleetEndpoint             = flag.String("fleetEndpoint", "", "Fleet API http endpoint: `http://host:port`")
 	servicesDefinitionFileUri = flag.String("servicesDefinitionFileUri", "", "URI file that contains services definition: `https://raw.githubusercontent.com/Financial-Times/fleet/master/services.yaml`")
 	socksProxy                = flag.String("socksProxy", "", "address of socks proxy, e.g., 127.0.0.1:9050")
-	destroyServiceBlacklist   = []string{"deployer.service", "deployer.timer"}
+	destroyServiceBlacklist   = map[string]struct{}{"deployer.service": struct{}{}, "deployer.timer": struct{}{}}
 )
 
 type services struct {
@@ -155,15 +155,6 @@ func (d *deployer) deployUnit(wantedUnit *schema.Unit) error {
 	return nil
 }
 
-func blacklistedService(name string, blackList []string) bool {
-	for _, b := range blackList {
-		if b == name {
-			return true
-		}
-	}
-	return false
-}
-
 func (d *deployer) destroyUnwanted(wantedUnits map[string]*schema.Unit) error {
 	currentUnits, err := d.buildCurrentUnits()
 	if err != nil {
@@ -172,7 +163,7 @@ func (d *deployer) destroyUnwanted(wantedUnits map[string]*schema.Unit) error {
 	for _, u := range currentUnits {
 		if wantedUnits[u.Name] == nil {
 			//Do not destroy the deployer itself
-			if !blacklistedService(u.Name, destroyServiceBlacklist) {
+			if _, ok := destroyServiceBlacklist[u.Name]; !ok {
 				err := d.fleetapi.DestroyUnit(u.Name)
 				if err != nil {
 					return err
