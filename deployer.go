@@ -23,7 +23,7 @@ var (
 	fleetEndpoint             = flag.String("fleetEndpoint", "", "Fleet API http endpoint: `http://host:port`")
 	servicesDefinitionFileUri = flag.String("servicesDefinitionFileUri", "", "URI file that contains services definition: `https://raw.githubusercontent.com/Financial-Times/fleet/master/services.yaml`")
 	socksProxy                = flag.String("socksProxy", "", "address of socks proxy, e.g., 127.0.0.1:9050")
-	destroyServiceBlacklist   = map[string]bool{"deployer.service": true, "deployer.timer": true}
+	destroyServiceBlacklist   = map[string]struct{}{"deployer.service": struct{}{}, "deployer.timer": struct{}{}}
 )
 
 type services struct {
@@ -153,15 +153,6 @@ func (d *deployer) deployUnit(wantedUnit *schema.Unit) error {
 		}
 	}
 	return nil
-}
-
-func blacklistedService(name string, blackList []string) bool {
-	for _, b := range blackList {
-		if b == name {
-			return true
-		}
-	}
-	return false
 }
 
 func (d *deployer) destroyUnwanted(wantedUnits map[string]*schema.Unit) error {
