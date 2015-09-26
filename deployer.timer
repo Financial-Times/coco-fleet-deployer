@@ -1,0 +1,12 @@
+[Unit]
+Description=Deployer timer
+
+[Timer]
+OnUnitActiveSec=1min
+
+[Install]
+WantedBy=timers.target
+
+[X-Fleet]
+MachineOf=deployer.service
+
