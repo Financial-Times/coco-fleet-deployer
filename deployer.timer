@@ -2,7 +2,7 @@
 Description=Deployer timer
 
 [Timer]
-OnUnitActiveSec=1min
+OnActiveSec=1min
 
 [Install]
 WantedBy=timers.target
