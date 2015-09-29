@@ -206,7 +206,8 @@ func (d *deployer) deployAll() error {
 	for _, u := range wantedUnits {
 		err = d.deployUnit(u)
 		if err != nil {
-			return err
+			log.Printf("WARNING Failed to deploy unit %s: %v [SKIPPING]", u.Name, err)
+			continue
 		}
 	}
 
@@ -322,7 +323,7 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, error) {
 		uf, err := unit.NewUnitFile(serviceFile)
 		if err != nil {
 			//Broken service file, skip it and continue
-			log.Printf("WARNING: service file %s is incorrect, check syntax [SKIPPING]", srv.Name)
+			log.Printf("WARNING service file %s is incorrect: %v [SKIPPING]", srv.Name, err)
 			continue
 		}
 
