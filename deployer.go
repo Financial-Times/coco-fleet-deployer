@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"github.com/coreos/fleet/client"
@@ -28,6 +29,7 @@ var (
 
 type services struct {
 	Services []service `yaml:"services"`
+	RootUri  string    `yaml:"rootUri"`
 }
 
 type service struct {
@@ -297,6 +299,17 @@ func newDeployer() (*deployer, error) {
 	return &deployer{fleetapi: fleetHttpApiClient, serviceDefinitionClient: serviceDefinitionClient}, nil
 }
 
+func buildServiceFileUri(rootUri, name string) (string, error) {
+	if strings.HasPrefix(name, "http") == true {
+		return name, nil
+	}
+	if rootUri == "" {
+		return "", errors.New("WARNING Service uri isn't absolute and rootUri not specified")
+	}
+	uri := fmt.Sprintf("%s/%s", rootUri, name)
+	return uri, nil
+}
+
 func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, error) {
 	units := make(map[string]*schema.Unit)
 	servicesDefinition, err := d.serviceDefinitionClient.servicesDefinition()
@@ -309,13 +322,21 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, error) {
 			log.Printf("WARNING no uri for service: %s", srv.Name)
 			continue
 		}
-		serviceTemplate, err := d.serviceDefinitionClient.serviceFile(srv.Uri)
+		// Build the uri root + name
+		serviceFileUri, err := buildServiceFileUri(servicesDefinition.RootUri, srv.Uri)
 		if err != nil {
+			log.Printf("%v", err)
+			continue
+		}
+		serviceTemplate, err := d.serviceDefinitionClient.serviceFile(serviceFileUri)
+		if err != nil {
+			log.Printf("%v", err)
 			continue
 		}
 		vars["version"] = srv.Version
 		serviceFile, err := renderedServiceFile(serviceTemplate, vars)
 		if err != nil {
+			log.Printf("%v", err)
 			return nil, err
 		}
 

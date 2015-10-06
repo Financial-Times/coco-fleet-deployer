@@ -26,6 +26,7 @@ services:
     version: latest`)
 
 var goodServiceYaml = []byte(`---
+rootUri: https://raw.githubusercontent.com/Financial-Times/fleet/master/service-files
 services:
   - name: mongodb@.service
     uri: https://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/mongodb@.service
@@ -42,7 +43,7 @@ services:
     version: latest
     count: 1
   - name: annotations-api-sidekick@.service 
-    uri: https://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/annotations-api-sidekick@.service
+    uri: annotations-api-sidekick@.service
     version: latest
     count: 1`)
 
@@ -110,7 +111,7 @@ func TestBuildWantedUnitsBad(t *testing.T) {
 		t.Fatalf("Scheduled a '@' unit without a count")
 	}
 	if len(wantedUnits) != 0 {
-		t.Fatalf("No services should've been loaded, loaded: %d", len(wantedUnits))
+		t.Fatalf("No services should've been loaded, loaded: %d, %v", len(wantedUnits), wantedUnits)
 	}
 
 	t.Logf("Passed with wanted units: %v", wantedUnits)
