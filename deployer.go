@@ -58,7 +58,7 @@ func renderServiceDefinitionYaml(serviceYaml []byte) (services services, err err
 func (hsdc *httpServiceDefinitionClient) servicesDefinition() (services, error) {
 	resp, err := hsdc.httpClient.Get(*servicesDefinitionFileURI)
 	if err != nil {
-		panic(err)
+		return services{}, err
 	}
 	defer resp.Body.Close()
 
@@ -109,7 +109,7 @@ func main() {
 
 	log.Printf("INFO Starting deploy run")
 	if err := d.deployAll(); err != nil {
-		panic(err)
+		log.Fatalf("Failed to run deploy : %v\n", err.Error())
 	}
 	log.Printf("INFO Finished deploy run")
 }
