@@ -14,7 +14,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"runtime/debug"
 	"strings"
 	"time"
 )
@@ -113,18 +112,6 @@ func main() {
 		panic(err)
 	}
 	log.Printf("INFO Finished deploy run")
-}
-
-func deployAndRecover(d *deployer) {
-	defer func() {
-		if r := recover(); r != nil {
-			log.Printf("ERROR Recovered: %s: %s", r, debug.Stack())
-		}
-	}()
-
-	if err := d.deployAll(); err != nil {
-		panic(err)
-	}
 }
 
 func (d *deployer) deployUnit(wantedUnit *schema.Unit) error {
