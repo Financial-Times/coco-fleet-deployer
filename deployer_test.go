@@ -79,8 +79,8 @@ func (msdc *mockBadServiceDefinitionClient) servicesDefinition() (services servi
 	return
 }
 
-func (msdc *mockBadServiceDefinitionClient) serviceFile(serviceFileUri string) ([]byte, error) {
-	if serviceFileUri == "bad-syntax.service" {
+func (msdc *mockBadServiceDefinitionClient) serviceFile(serviceFileURI string) ([]byte, error) {
+	if serviceFileURI == "bad-syntax.service" {
 		return badServiceFileString, nil
 	}
 	return goodServiceFileString, nil
@@ -93,7 +93,7 @@ func (msdc *mockGoodServiceDefinitionClient) servicesDefinition() (services serv
 	return
 }
 
-func (msdc *mockGoodServiceDefinitionClient) serviceFile(serviceFileUri string) ([]byte, error) {
+func (msdc *mockGoodServiceDefinitionClient) serviceFile(serviceFileURI string) ([]byte, error) {
 	return goodServiceFileString, nil
 }
 
