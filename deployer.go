@@ -36,6 +36,7 @@ type service struct {
 	Version string `yaml:"version"`
 	Count   int    `yaml:"count"`
 	URI     string `yaml:"uri"`
+	DesiredState string `yaml:"desiredState"`
 }
 
 type serviceDefinitionClient interface {
@@ -170,9 +171,9 @@ func (d *deployer) launchAll() error {
 		return err
 	}
 
-	// start everything that's not started
+	// start everything that should be started
 	for _, u := range currentUnits {
-		if u.DesiredState != "launched" {
+		if u.DesiredState == "launched" {
 			log.Printf("INFO Desired state: %s", u.DesiredState)
 			err := d.fleetapi.SetUnitTargetState(u.Name, "launched")
 			if err != nil {
@@ -185,6 +186,7 @@ func (d *deployer) launchAll() error {
 
 func (d *deployer) deployAll() error {
 	// Get service definition - wanted units
+	//get whitelist
 	wantedUnits, err := d.buildWantedUnits()
 
 	if err != nil {
@@ -205,7 +207,6 @@ func (d *deployer) deployAll() error {
 	if err != nil {
 		return err
 	}
-
 	// launch all units in the cluster
 	err = d.launchAll()
 	if err != nil {
@@ -334,11 +335,17 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, error) {
 			log.Printf("WARNING service file %s is incorrect: %v [SKIPPING]", srv.Name, err)
 			continue
 		}
-
+		
+		desiredState := "launched"
+		if srv.DesiredState == "loaded" {
+			desiredState = srv.DesiredState
+		}
+		
 		if srv.Count == 0 && !strings.Contains(srv.Name, "@") {
 			u := &schema.Unit{
 				Name:    srv.Name,
 				Options: schema.MapUnitFileToSchemaUnitOptions(uf),
+				DesiredState :desiredState,
 			}
 
 			units[srv.Name] = u
@@ -349,6 +356,7 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, error) {
 				u := &schema.Unit{
 					Name:    xName,
 					Options: schema.MapUnitFileToSchemaUnitOptions(uf),
+					DesiredState :desiredState,
 				}
 
 				units[u.Name] = u
