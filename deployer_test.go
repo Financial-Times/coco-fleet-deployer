@@ -148,17 +148,17 @@ func TestBuildDesiredStateHandling(t *testing.T) {
 	mockServiceDefinitionClient := &mockGoodServiceDefinitionClient{}
 	d := &deployer{serviceDefinitionClient: mockServiceDefinitionClient}
 	wantedUnits, _ := d.buildWantedUnits()
-	
+
 	withoutState := wantedUnits["annotations-api-sidekick@1.service"]
-	if withoutState.DesiredState != "launched"{
+	if withoutState.DesiredState != "launched" {
 		t.Fatalf("Didn't set DesiredState to default value when none is provided")
 	}
-	
+
 	withHandledState := wantedUnits["mongo-backup.service"]
-	if withHandledState.DesiredState != "loaded"{
+	if withHandledState.DesiredState != "loaded" {
 		t.Fatalf("Didn't set DesiredState to provided value")
 	}
-	
+
 	withUnhandledState := wantedUnits["mongo-backup.timer"]
 	if withUnhandledState.DesiredState != "launched" {
 		t.Fatalf("Didn't set DesiredState to default value when unhandled value provided")

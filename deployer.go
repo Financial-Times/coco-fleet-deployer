@@ -32,10 +32,10 @@ type services struct {
 }
 
 type service struct {
-	Name    string `yaml:"name"`
-	Version string `yaml:"version"`
-	Count   int    `yaml:"count"`
-	URI     string `yaml:"uri"`
+	Name         string `yaml:"name"`
+	Version      string `yaml:"version"`
+	Count        int    `yaml:"count"`
+	URI          string `yaml:"uri"`
 	DesiredState string `yaml:"desiredState"`
 }
 
@@ -335,17 +335,17 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, error) {
 			log.Printf("WARNING service file %s is incorrect: %v [SKIPPING]", srv.Name, err)
 			continue
 		}
-		
+
 		desiredState := "launched"
 		if srv.DesiredState == "loaded" {
 			desiredState = srv.DesiredState
 		}
-		
+
 		if srv.Count == 0 && !strings.Contains(srv.Name, "@") {
 			u := &schema.Unit{
-				Name:    srv.Name,
-				Options: schema.MapUnitFileToSchemaUnitOptions(uf),
-				DesiredState :desiredState,
+				Name:         srv.Name,
+				Options:      schema.MapUnitFileToSchemaUnitOptions(uf),
+				DesiredState: desiredState,
 			}
 
 			units[srv.Name] = u
@@ -354,9 +354,9 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, error) {
 				xName := strings.Replace(srv.Name, "@", fmt.Sprintf("@%d", i+1), -1)
 
 				u := &schema.Unit{
-					Name:    xName,
-					Options: schema.MapUnitFileToSchemaUnitOptions(uf),
-					DesiredState :desiredState,
+					Name:         xName,
+					Options:      schema.MapUnitFileToSchemaUnitOptions(uf),
+					DesiredState: desiredState,
 				}
 
 				units[u.Name] = u
