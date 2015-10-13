@@ -165,20 +165,22 @@ func (d *deployer) destroyUnwanted(wantedUnits map[string]*schema.Unit) error {
 
 }
 
-func (d *deployer) launchAll() error {
-	currentUnits, err := d.buildCurrentUnits()
-	if err != nil {
-		return err
-	}
+func (d *deployer) launchAll(wantedUnits map[string]*schema.Unit) error {
+	//Not sure why we got them all again for this step? Perhaps when we did a soft destroy?
+	//currentUnits, err := d.buildCurrentUnits()
+	//if err != nil {
+	//	return err
+	//}
 
 	// start everything that should be started
-	for _, u := range currentUnits {
-		if u.DesiredState == "launched" {
-			log.Printf("INFO Desired state: %s", u.DesiredState)
-			err := d.fleetapi.SetUnitTargetState(u.Name, "launched")
-			if err != nil {
-				return err
-			}
+	for _, u := range wantedUnits {
+		if u.DesiredState == "" {
+			u.DesiredState = "launched"
+		}
+		log.Printf("INFO Desired state: %s", u.DesiredState)
+		err := d.fleetapi.SetUnitTargetState(u.Name, u.DesiredState)
+		if err != nil {
+			return err
 		}
 	}
 	return nil
@@ -208,7 +210,7 @@ func (d *deployer) deployAll() error {
 		return err
 	}
 	// launch all units in the cluster
-	err = d.launchAll()
+	err = d.launchAll(wantedUnits)
 	if err != nil {
 		return err
 	}
@@ -336,16 +338,11 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, error) {
 			continue
 		}
 
-		desiredState := "launched"
-		if srv.DesiredState == "loaded" {
-			desiredState = srv.DesiredState
-		}
-
 		if srv.Count == 0 && !strings.Contains(srv.Name, "@") {
 			u := &schema.Unit{
 				Name:         srv.Name,
 				Options:      schema.MapUnitFileToSchemaUnitOptions(uf),
-				DesiredState: desiredState,
+				DesiredState: srv.DesiredState,
 			}
 
 			units[srv.Name] = u
@@ -356,7 +353,7 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, error) {
 				u := &schema.Unit{
 					Name:         xName,
 					Options:      schema.MapUnitFileToSchemaUnitOptions(uf),
-					DesiredState: desiredState,
+					DesiredState: srv.DesiredState,
 				}
 
 				units[u.Name] = u

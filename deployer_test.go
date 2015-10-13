@@ -148,10 +148,12 @@ func TestBuildDesiredStateHandling(t *testing.T) {
 	mockServiceDefinitionClient := &mockGoodServiceDefinitionClient{}
 	d := &deployer{serviceDefinitionClient: mockServiceDefinitionClient}
 	wantedUnits, _ := d.buildWantedUnits()
+	//TODO would be nice to look at whats being passed to fleet here and assert on that
+	//d.launchAll(wantedUnits)
 
 	withoutState := wantedUnits["annotations-api-sidekick@1.service"]
-	if withoutState.DesiredState != "launched" {
-		t.Fatalf("Didn't set DesiredState to default value when none is provided")
+	if withoutState.DesiredState != "" {
+		t.Fatalf("Set value %s for desiredState", withoutState.DesiredState)
 	}
 
 	withHandledState := wantedUnits["mongo-backup.service"]
@@ -160,8 +162,8 @@ func TestBuildDesiredStateHandling(t *testing.T) {
 	}
 
 	withUnhandledState := wantedUnits["mongo-backup.timer"]
-	if withUnhandledState.DesiredState != "launched" {
-		t.Fatalf("Didn't set DesiredState to default value when unhandled value provided")
+	if withUnhandledState.DesiredState != "inactive" {
+		t.Fatalf("Didn't set DesiredState to value provided")
 	}
 }
 
