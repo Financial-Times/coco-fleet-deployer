@@ -45,7 +45,14 @@ services:
   - name: annotations-api-sidekick@.service 
     uri: annotations-api-sidekick@.service
     version: latest
-    count: 1`)
+    count: 1
+  - name: mongo-backup.service
+    uri: https://raw.githubusercontent.com/Financial-Times/fleet/pre-prod/service-files/mongo-backup.service
+    desiredState: loaded
+  - name: mongo-backup.timer
+    uri: https://raw.githubusercontent.com/Financial-Times/fleet/pre-prod/service-files/mongo-backup.timer
+    desiredState: inactive
+`)
 
 var goodServiceFileString = []byte(`[Unit]
 Description=Deployer
@@ -127,11 +134,37 @@ func TestBuildWantedUnitsGood(t *testing.T) {
 	if wantedUnits["mongodb-configurator.service"] == nil {
 		t.Fatalf("Didn't load a service without a count")
 	}
-	if len(wantedUnits) != 9 {
+	if wantedUnits["mongodb-configurator.service"] == nil {
+		t.Fatalf("Didn't load a service without a desiredState")
+	}
+	if len(wantedUnits) != 11 {
 		t.Fatalf("Didn't load all services, loaded: %d", len(wantedUnits))
 	}
 
 	t.Logf("Passed with wanted units: %v", wantedUnits)
+}
+
+func TestBuildDesiredStateHandling(t *testing.T) {
+	mockServiceDefinitionClient := &mockGoodServiceDefinitionClient{}
+	d := &deployer{serviceDefinitionClient: mockServiceDefinitionClient}
+	wantedUnits, _ := d.buildWantedUnits()
+	//TODO would be nice to look at whats being passed to fleet here and assert on that
+	//d.launchAll(wantedUnits)
+
+	withoutState := wantedUnits["annotations-api-sidekick@1.service"]
+	if withoutState.DesiredState != "" {
+		t.Fatalf("Set value %s for desiredState", withoutState.DesiredState)
+	}
+
+	withHandledState := wantedUnits["mongo-backup.service"]
+	if withHandledState.DesiredState != "loaded" {
+		t.Fatalf("Didn't set DesiredState to provided value")
+	}
+
+	withUnhandledState := wantedUnits["mongo-backup.timer"]
+	if withUnhandledState.DesiredState != "inactive" {
+		t.Fatalf("Didn't set DesiredState to value provided")
+	}
 }
 
 func TestRenderServiceFile(t *testing.T) {

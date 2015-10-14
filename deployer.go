@@ -32,10 +32,11 @@ type services struct {
 }
 
 type service struct {
-	Name    string `yaml:"name"`
-	Version string `yaml:"version"`
-	Count   int    `yaml:"count"`
-	URI     string `yaml:"uri"`
+	Name         string `yaml:"name"`
+	Version      string `yaml:"version"`
+	Count        int    `yaml:"count"`
+	URI          string `yaml:"uri"`
+	DesiredState string `yaml:"desiredState"`
 }
 
 type serviceDefinitionClient interface {
@@ -164,20 +165,22 @@ func (d *deployer) destroyUnwanted(wantedUnits map[string]*schema.Unit) error {
 
 }
 
-func (d *deployer) launchAll() error {
-	currentUnits, err := d.buildCurrentUnits()
-	if err != nil {
-		return err
-	}
+func (d *deployer) launchAll(wantedUnits map[string]*schema.Unit) error {
+	//Not sure why we got them all again for this step? Perhaps when we did a soft destroy?
+	//currentUnits, err := d.buildCurrentUnits()
+	//if err != nil {
+	//	return err
+	//}
 
-	// start everything that's not started
-	for _, u := range currentUnits {
-		if u.DesiredState != "launched" {
-			log.Printf("INFO Desired state: %s", u.DesiredState)
-			err := d.fleetapi.SetUnitTargetState(u.Name, "launched")
-			if err != nil {
-				return err
-			}
+	// start everything that should be started
+	for _, u := range wantedUnits {
+		if u.DesiredState == "" {
+			u.DesiredState = "launched"
+		}
+		log.Printf("INFO Desired state: %s", u.DesiredState)
+		err := d.fleetapi.SetUnitTargetState(u.Name, u.DesiredState)
+		if err != nil {
+			return err
 		}
 	}
 	return nil
@@ -185,6 +188,7 @@ func (d *deployer) launchAll() error {
 
 func (d *deployer) deployAll() error {
 	// Get service definition - wanted units
+	//get whitelist
 	wantedUnits, err := d.buildWantedUnits()
 
 	if err != nil {
@@ -205,9 +209,8 @@ func (d *deployer) deployAll() error {
 	if err != nil {
 		return err
 	}
-
 	// launch all units in the cluster
-	err = d.launchAll()
+	err = d.launchAll(wantedUnits)
 	if err != nil {
 		return err
 	}
@@ -337,8 +340,9 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, error) {
 
 		if srv.Count == 0 && !strings.Contains(srv.Name, "@") {
 			u := &schema.Unit{
-				Name:    srv.Name,
-				Options: schema.MapUnitFileToSchemaUnitOptions(uf),
+				Name:         srv.Name,
+				Options:      schema.MapUnitFileToSchemaUnitOptions(uf),
+				DesiredState: srv.DesiredState,
 			}
 
 			units[srv.Name] = u
@@ -347,8 +351,9 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, error) {
 				xName := strings.Replace(srv.Name, "@", fmt.Sprintf("@%d", i+1), -1)
 
 				u := &schema.Unit{
-					Name:    xName,
-					Options: schema.MapUnitFileToSchemaUnitOptions(uf),
+					Name:         xName,
+					Options:      schema.MapUnitFileToSchemaUnitOptions(uf),
+					DesiredState: srv.DesiredState,
 				}
 
 				units[u.Name] = u
