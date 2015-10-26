@@ -1,7 +1,11 @@
 package main
 
 import (
+	"errors"
 	"gopkg.in/yaml.v2"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -26,7 +30,6 @@ services:
     version: latest`)
 
 var goodServiceYaml = []byte(`---
-rootUri: https://raw.githubusercontent.com/Financial-Times/fleet/master/service-files
 services:
   - name: mongodb@.service
     uri: https://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/mongodb@.service
@@ -86,8 +89,8 @@ func (msdc *mockBadServiceDefinitionClient) servicesDefinition() (services servi
 	return
 }
 
-func (msdc *mockBadServiceDefinitionClient) serviceFile(serviceFileURI string) ([]byte, error) {
-	if serviceFileURI == "bad-syntax.service" {
+func (msdc *mockBadServiceDefinitionClient) serviceFile(service service) ([]byte, error) {
+	if service.URI == "bad-syntax.service" {
 		return badServiceFileString, nil
 	}
 	return goodServiceFileString, nil
@@ -100,7 +103,7 @@ func (msdc *mockGoodServiceDefinitionClient) servicesDefinition() (services serv
 	return
 }
 
-func (msdc *mockGoodServiceDefinitionClient) serviceFile(serviceFileURI string) ([]byte, error) {
+func (msdc *mockGoodServiceDefinitionClient) serviceFile(service service) ([]byte, error) {
 	return goodServiceFileString, nil
 }
 
@@ -178,4 +181,94 @@ func TestRenderServiceFile(t *testing.T) {
 	if !strings.Contains(serviceFile, vars["version"].(string)) {
 		t.Errorf("Service file didn't render properly\n%s", serviceFile)
 	}
+}
+func TestServicesDefinition(t *testing.T) {
+
+	// Test server that always responds with 200 code, and specific payload
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		w.Header().Set("Content-Type", "text/plain")
+		w.Write(goodServiceYaml)
+	}))
+	defer server.Close()
+
+	// Make a transport that reroutes all traffic to the example server
+	transport := &http.Transport{
+		Proxy: func(req *http.Request) (*url.URL, error) {
+			if req.URL.String() == "http://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/services.yaml" {
+				return url.Parse(server.URL)
+			}
+			return nil, errors.New("Unexpected url. Failing.")
+		},
+	}
+
+	// Make a http.Client with the transport
+	httpClient := &http.Client{Transport: transport}
+
+	serviceDefinitionClient := &httpServiceDefinitionClient{httpClient: httpClient, rootURI: "http://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/"}
+	services, err := serviceDefinitionClient.servicesDefinition()
+	if len(services.Services) != 7 || err != nil {
+		t.Fatalf("Didn't retrieve services definition: %w", err)
+	}
+}
+
+func TestServiceFileForRelativeUri(t *testing.T) {
+
+	// Test server that always responds with 200 code, and specific payload
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		w.Header().Set("Content-Type", "text/plain")
+		w.Write(goodServiceFileString)
+	}))
+	defer server.Close()
+
+	// Make a transport that reroutes all traffic to the example server
+	transport := &http.Transport{
+		Proxy: func(req *http.Request) (*url.URL, error) {
+			if req.URL.String() == "http://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/deployer.service" {
+				return url.Parse(server.URL)
+			}
+			return nil, errors.New("Unexpected url. Failing.")
+		},
+	}
+
+	// Make a http.Client with the transport
+	httpClient := &http.Client{Transport: transport}
+
+	serviceDefinitionClient := &httpServiceDefinitionClient{httpClient: httpClient, rootURI: "http://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/"}
+	_, err := serviceDefinitionClient.serviceFile(service{Name: "deployer.service", URI: "deployer.service"})
+	if err != nil {
+		t.Fatalf("Didn't retrieve service definition: %w", err)
+	}
+}
+
+func TestServiceFileForAbsoluteUri(t *testing.T) {
+
+	// Test server that always responds with 200 code, and specific payload
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		w.Header().Set("Content-Type", "text/plain")
+		w.Write(goodServiceFileString)
+	}))
+	defer server.Close()
+
+	// Make a transport that reroutes all traffic to the example server
+	transport := &http.Transport{
+		Proxy: func(req *http.Request) (*url.URL, error) {
+			if req.URL.String() == "http://mydeployer.com/deployer.service" {
+				return url.Parse(server.URL)
+			}
+			return nil, errors.New("Unexpected url. Failing.")
+		},
+	}
+
+	// Make a http.Client with the transport
+	httpClient := &http.Client{Transport: transport}
+
+	serviceDefinitionClient := &httpServiceDefinitionClient{httpClient: httpClient, rootURI: "http://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/"}
+	_, err := serviceDefinitionClient.serviceFile(service{Name: "deployer.service", URI: "http://mydeployer.com/deployer.service"})
+	if err != nil {
+		t.Fatalf("Didn't retrieve service definition: %w", err)
+	}
+
 }
