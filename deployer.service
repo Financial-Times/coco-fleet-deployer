@@ -4,7 +4,7 @@ After=docker.service
 Requires=docker.service
 
 [Service]
-Environment="DOCKER_APP_VERSION=latest"
+Environment="DOCKER_APP_VERSION=v1"
 TimeoutStartSec=0
 Type=oneshot
 ExecStartPre=-/bin/bash -c '/usr/bin/docker kill %p > /dev/null 2>&1'
