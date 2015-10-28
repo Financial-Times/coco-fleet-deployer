@@ -14,5 +14,5 @@ RUN apk --update add go git\
   && apk del go git \
   && rm -rf $GOPATH /var/cache/apk/*
 
-CMD /coco-fleet-deployer -fleetEndpoint=$FLEET_ENDPOINT -servicesDefinitionFileUri=$SERVICES_DEFINITION_FILE_URI -destroy=$DESTROY
+CMD /coco-fleet-deployer -fleetEndpoint=$FLEET_ENDPOINT -rootURI=$ROOT_URI -destroy=$DESTROY
 

@@ -19,16 +19,15 @@ import (
 )
 
 var (
-	destroyFlag               = flag.Bool("destroy", false, "Destroy units not found in the definition")
-	fleetEndpoint             = flag.String("fleetEndpoint", "", "Fleet API http endpoint: `http://host:port`")
-	servicesDefinitionFileURI = flag.String("servicesDefinitionFileUri", "", "URI file that contains services definition: `https://raw.githubusercontent.com/Financial-Times/fleet/master/services.yaml`")
-	socksProxy                = flag.String("socksProxy", "", "address of socks proxy, e.g., 127.0.0.1:9050")
-	destroyServiceBlacklist   = map[string]struct{}{"deployer.service": struct{}{}, "deployer.timer": struct{}{}}
+	destroyFlag             = flag.Bool("destroy", false, "Destroy units not found in the definition")
+	fleetEndpoint           = flag.String("fleetEndpoint", "", "Fleet API http endpoint: `http://host:port`")
+	socksProxy              = flag.String("socksProxy", "", "address of socks proxy, e.g., 127.0.0.1:9050")
+	destroyServiceBlacklist = map[string]struct{}{"deployer.service": struct{}{}, "deployer.timer": struct{}{}}
+	rootURI                 = flag.String("rootURI", "", "Base uri to use when constructing service file URI. Only used if service file URI is relative.")
 )
 
 type services struct {
 	Services []service `yaml:"services"`
-	RootURI  string    `yaml:"rootUri"`
 }
 
 type service struct {
@@ -41,12 +40,12 @@ type service struct {
 
 type serviceDefinitionClient interface {
 	servicesDefinition() (services, error)
-	serviceFile(serviceFileURI string) ([]byte, error)
+	serviceFile(service service) ([]byte, error)
 }
 
 type httpServiceDefinitionClient struct {
-	httpClient      *http.Client
-	serviceFilesURI string
+	httpClient *http.Client
+	rootURI    string
 }
 
 func renderServiceDefinitionYaml(serviceYaml []byte) (services services, err error) {
@@ -57,7 +56,7 @@ func renderServiceDefinitionYaml(serviceYaml []byte) (services services, err err
 }
 
 func (hsdc *httpServiceDefinitionClient) servicesDefinition() (services, error) {
-	resp, err := hsdc.httpClient.Get(*servicesDefinitionFileURI)
+	resp, err := hsdc.httpClient.Get(hsdc.rootURI + "services.yaml")
 	if err != nil {
 		return services{}, err
 	}
@@ -70,8 +69,12 @@ func (hsdc *httpServiceDefinitionClient) servicesDefinition() (services, error) 
 	return renderServiceDefinitionYaml(serviceYaml)
 }
 
-func (hsdc *httpServiceDefinitionClient) serviceFile(serviceFileURI string) ([]byte, error) {
-	resp, err := hsdc.httpClient.Get(serviceFileURI)
+func (hsdc *httpServiceDefinitionClient) serviceFile(service service) ([]byte, error) {
+	serviceFileUri, err := buildServiceFileUri(service.URI, hsdc.rootURI)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := hsdc.httpClient.Get(serviceFileUri)
 	if err != nil {
 		return nil, err
 	}
@@ -99,10 +102,9 @@ func main() {
 		log.Fatal("Fleet endpoint is required")
 	}
 
-	if *servicesDefinitionFileURI == "" {
+	if *rootURI == "" {
 		log.Fatal("Services definition file uri is required")
 	}
-
 	d, err := newDeployer()
 	if err != nil {
 		panic(err)
@@ -285,18 +287,18 @@ func newDeployer() (*deployer, error) {
 		log.Println("destroy not enabled (use -destroy to enable)")
 		fleetHTTPAPIClient = noDestroyFleetAPI{fleetHTTPAPIClient}
 	}
-	serviceDefinitionClient := &httpServiceDefinitionClient{httpClient: &http.Client{}}
+	serviceDefinitionClient := &httpServiceDefinitionClient{httpClient: &http.Client{}, rootURI: *rootURI}
 	return &deployer{fleetapi: fleetHTTPAPIClient, serviceDefinitionClient: serviceDefinitionClient}, nil
 }
 
-func buildServiceFileURI(rootURI, name string) (string, error) {
+func buildServiceFileUri(name string, rootURI string) (string, error) {
 	if strings.HasPrefix(name, "http") == true {
 		return name, nil
 	}
 	if rootURI == "" {
 		return "", errors.New("WARNING Service uri isn't absolute and rootURI not specified")
 	}
-	uri := fmt.Sprintf("%s/%s", rootURI, name)
+	uri := fmt.Sprintf("%s%s", rootURI, name)
 	return uri, nil
 }
 
@@ -312,13 +314,7 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, error) {
 			log.Printf("WARNING no uri for service: %s", srv.Name)
 			continue
 		}
-		// Build the uri root + name
-		serviceFileURI, err := buildServiceFileURI(servicesDefinition.RootURI, srv.URI)
-		if err != nil {
-			log.Printf("%v", err)
-			continue
-		}
-		serviceTemplate, err := d.serviceDefinitionClient.serviceFile(serviceFileURI)
+		serviceTemplate, err := d.serviceDefinitionClient.serviceFile(srv)
 		if err != nil {
 			log.Printf("%v", err)
 			continue
