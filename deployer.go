@@ -70,7 +70,7 @@ func (hsdc *httpServiceDefinitionClient) servicesDefinition() (services, error) 
 }
 
 func (hsdc *httpServiceDefinitionClient) serviceFile(service service) ([]byte, error) {
-	serviceFileUri, err := buildServiceFileUri(service.URI, hsdc.rootURI)
+	serviceFileUri, err := buildServiceFileUri(service, hsdc.rootURI)
 	if err != nil {
 		return nil, err
 	}
@@ -291,14 +291,14 @@ func newDeployer() (*deployer, error) {
 	return &deployer{fleetapi: fleetHTTPAPIClient, serviceDefinitionClient: serviceDefinitionClient}, nil
 }
 
-func buildServiceFileUri(name string, rootURI string) (string, error) {
-	if strings.HasPrefix(name, "http") == true {
-		return name, nil
+func buildServiceFileUri(service service, rootURI string) (string, error) {
+	if strings.HasPrefix(service.URI, "http") == true {
+		return service.URI, nil
 	}
 	if rootURI == "" {
 		return "", errors.New("WARNING Service uri isn't absolute and rootURI not specified")
 	}
-	uri := fmt.Sprintf("%s%s", rootURI, name)
+	uri := fmt.Sprintf("%s%s", rootURI, service.Name)
 	return uri, nil
 }
 
