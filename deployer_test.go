@@ -12,14 +12,6 @@ import (
 
 var badServiceYaml = []byte(`---
 services:
-  - name: mongodb@.service
-    version: latest
-    count: 3
-  - name: mongodb-sidekick@.service
-    version: latest
-    count: 3
-  - name: mongodb-configurator.service
-    version: latest
   - name: annotations-api@.service 
     version: latest
     count: 0

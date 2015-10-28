@@ -310,10 +310,6 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, error) {
 	}
 	for _, srv := range servicesDefinition.Services {
 		vars := make(map[string]interface{})
-		if srv.URI == "" {
-			log.Printf("WARNING no uri for service: %s", srv.Name)
-			continue
-		}
 		serviceTemplate, err := d.serviceDefinitionClient.serviceFile(srv)
 		if err != nil {
 			log.Printf("%v", err)
