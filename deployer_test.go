@@ -212,7 +212,7 @@ func TestServicesDefinition(t *testing.T) {
 	}
 }
 
-func TestServiceFileForRelativeUri(t *testing.T) {
+func TestServiceFileForMissingUri(t *testing.T) {
 
 	// Test server that always responds with 200 code, and specific payload
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -236,7 +236,7 @@ func TestServiceFileForRelativeUri(t *testing.T) {
 	httpClient := &http.Client{Transport: transport}
 
 	serviceDefinitionClient := &httpServiceDefinitionClient{httpClient: httpClient, rootURI: "http://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/"}
-	_, err := serviceDefinitionClient.serviceFile(service{Name: "deployer.service", URI: "deployer.service"})
+	_, err := serviceDefinitionClient.serviceFile(service{Name: "deployer.service"})
 	if err != nil {
 		t.Fatalf("Didn't retrieve service definition: %w", err)
 	}
