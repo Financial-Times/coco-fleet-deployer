@@ -3,9 +3,11 @@ package main
 import (
 	"errors"
 	"gopkg.in/yaml.v2"
+	"log/syslog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 )
@@ -73,6 +75,18 @@ ExecStartPre=-/usr/bin/docker rm %p-%i
 ExecStartPre=/usr/bin/docker pull coco/coco-fleet-deployer:$DOCKER_APP_VESRION
 ExecStart=/bin/bash -c "docker run --rm --name %p-%i --env=\"FLEET_ENDPOINT=http://$HOSTNAME:49153\" --env=\"SERVICE_FILES_URI=https://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/\" --env=\"SERVICES_DEFINITION_FILE_URI=https://raw.githubusercontent.com/Financial-Times/fleet/master/services.yaml\" --env=\"INTERVAL_IN_SECONDS_BETWEEN_DEPLOYS=60\" --env=\"DESTROY=false\" coco/coco-fleet-deployer:$DOCKER_APP_VESRION"
 ExecStop=/usr/bin/docker stop -t 3 %p-%i`)
+
+func TestMain(m *testing.M) {
+	// Init logger
+	var err error
+	logger, err = syslog.New(syslog.LOG_INFO, "deployer")
+	defer logger.Close()
+	if err != nil {
+		panic(err)
+	}
+
+	os.Exit(m.Run())
+}
 
 type mockBadServiceDefinitionClient struct{}
 
