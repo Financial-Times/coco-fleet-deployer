@@ -11,12 +11,15 @@ import (
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"log"
+	"log/syslog"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 )
+
+var logger *syslog.Writer
 
 var (
 	destroyFlag             = flag.Bool("destroy", false, "Destroy units not found in the definition")
@@ -97,6 +100,14 @@ func renderedServiceFile(serviceTemplate []byte, context map[string]interface{})
 }
 
 func main() {
+	// Init logger
+	var err error
+	logger, err = syslog.New(syslog.LOG_INFO, "deployer")
+	defer logger.Close()
+	if err != nil {
+		panic(err)
+	}
+
 	flag.Parse()
 	if *fleetEndpoint == "" {
 		log.Fatal("Fleet endpoint is required")
@@ -110,11 +121,11 @@ func main() {
 		panic(err)
 	}
 
-	log.Printf("INFO Starting deploy run")
+	logger.Info("Starting deploy run")
 	if err := d.deployAll(); err != nil {
 		log.Fatalf("Failed to run deploy : %v\n", err.Error())
 	}
-	log.Printf("INFO Finished deploy run")
+	logger.Info("Finished deploy run")
 }
 
 func (d *deployer) deployUnit(wantedUnit *schema.Unit) error {
@@ -133,7 +144,7 @@ func (d *deployer) deployUnit(wantedUnit *schema.Unit) error {
 	wuf := schema.MapSchemaUnitOptionsToUnitFile(wantedUnit.Options)
 	cuf := schema.MapSchemaUnitOptionsToUnitFile(currentUnit.Options)
 	if wuf.Hash() != cuf.Hash() {
-		log.Printf("INFO Service %s differs from the cluster version", wantedUnit.Name)
+		logger.Info(fmt.Sprintf("Service %s differs from the cluster version", wantedUnit.Name))
 		wantedUnit.DesiredState = "inactive"
 		err = d.fleetapi.DestroyUnit(wantedUnit.Name)
 		if err != nil {
@@ -179,7 +190,6 @@ func (d *deployer) launchAll(wantedUnits map[string]*schema.Unit) error {
 		if u.DesiredState == "" {
 			u.DesiredState = "launched"
 		}
-		log.Printf("INFO Desired state: %s", u.DesiredState)
 		err := d.fleetapi.SetUnitTargetState(u.Name, u.DesiredState)
 		if err != nil {
 			return err
@@ -201,7 +211,7 @@ func (d *deployer) deployAll() error {
 	for _, u := range wantedUnits {
 		err = d.deployUnit(u)
 		if err != nil {
-			log.Printf("WARNING Failed to deploy unit %s: %v [SKIPPING]", u.Name, err)
+			logger.Warning(fmt.Sprint("Failed to deploy unit %s: %v [SKIPPING]", u.Name, err))
 			continue
 		}
 	}
@@ -225,17 +235,17 @@ type loggingFleetAPI struct {
 }
 
 func (lapi loggingFleetAPI) CreateUnit(unit *schema.Unit) error {
-	log.Printf("INFO Creating or updating unit %s\n", unit.Name)
+	logger.Info(fmt.Sprintf("Creating or updating unit %s\n", unit.Name))
 	return lapi.API.CreateUnit(unit)
 }
 
 func (lapi loggingFleetAPI) DestroyUnit(unit string) error {
-	log.Printf("INFO Destroying unit %s\n", unit)
+	logger.Info(fmt.Sprintf("Destroying unit %s\n", unit))
 	return lapi.API.DestroyUnit(unit)
 }
 
 func (lapi loggingFleetAPI) SetUnitTargetState(name, desiredState string) error {
-	log.Printf("INFO Setting target state for %s to %s\n", name, desiredState)
+	logger.Info(fmt.Sprintf("Setting target state for %s to %s\n", name, desiredState))
 	return lapi.API.SetUnitTargetState(name, desiredState)
 }
 
@@ -244,7 +254,7 @@ type noDestroyFleetAPI struct {
 }
 
 func (api noDestroyFleetAPI) DestroyUnit(name string) error {
-	log.Printf("INFO skipping destroying for unit %v\n", name)
+	logger.Info(fmt.Sprintf("INFO skipping destroying for unit %v\n", name))
 	return nil
 }
 
@@ -261,7 +271,7 @@ func newDeployer() (*deployer, error) {
 	httpClient := &http.Client{}
 
 	if *socksProxy != "" {
-		log.Printf("using proxy %s\n", *socksProxy)
+		logger.Info(fmt.Sprintf("using proxy %s\n", *socksProxy))
 		netDialler := &net.Dialer{
 			Timeout:   30 * time.Second,
 			KeepAlive: 30 * time.Second,
@@ -275,7 +285,6 @@ func newDeployer() (*deployer, error) {
 			Dial:                dialer.Dial,
 			TLSHandshakeTimeout: 10 * time.Second,
 		}
-
 	}
 
 	fleetHTTPAPIClient, err := client.NewHTTPClient(httpClient, *u)
@@ -284,7 +293,7 @@ func newDeployer() (*deployer, error) {
 	}
 	fleetHTTPAPIClient = loggingFleetAPI{fleetHTTPAPIClient}
 	if !*destroyFlag {
-		log.Println("destroy not enabled (use -destroy to enable)")
+		logger.Info(fmt.Sprintf("destroy not enabled (use -destroy to enable)\n"))
 		fleetHTTPAPIClient = noDestroyFleetAPI{fleetHTTPAPIClient}
 	}
 	serviceDefinitionClient := &httpServiceDefinitionClient{httpClient: &http.Client{}, rootURI: *rootURI}
@@ -312,13 +321,13 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, error) {
 		vars := make(map[string]interface{})
 		serviceTemplate, err := d.serviceDefinitionClient.serviceFile(srv)
 		if err != nil {
-			log.Printf("%v", err)
+			logger.Info(fmt.Sprintf("%v", err))
 			continue
 		}
 		vars["version"] = srv.Version
 		serviceFile, err := renderedServiceFile(serviceTemplate, vars)
 		if err != nil {
-			log.Printf("%v", err)
+			logger.Info(fmt.Sprintf("%v", err))
 			return nil, err
 		}
 
@@ -326,7 +335,7 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, error) {
 		uf, err := unit.NewUnitFile(serviceFile)
 		if err != nil {
 			//Broken service file, skip it and continue
-			log.Printf("WARNING service file %s is incorrect: %v [SKIPPING]", srv.Name, err)
+			logger.Warning(fmt.Sprintf("Service file %s is incorrect: %v [SKIPPING]", srv.Name, err))
 			continue
 		}
 
@@ -351,7 +360,7 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, error) {
 				units[u.Name] = u
 			}
 		} else {
-			log.Printf("WARNING skipping service: %s, incorrect service definition", srv.Name)
+			logger.Warning(fmt.Sprintf("Skipping service: %s, incorrect service definition", srv.Name))
 		}
 	}
 	return units, nil
