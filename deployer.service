@@ -6,9 +6,13 @@ Requires=docker.service
 [Service]
 Environment="DOCKER_APP_VERSION=latest"
 TimeoutStartSec=0
-Type=oneshot
+KillMode=none
 ExecStartPre=-/bin/bash -c '/usr/bin/docker kill %p > /dev/null 2>&1'
 ExecStartPre=-/bin/bash -c '/usr/bin/docker rm %p > /dev/null 2>&1'
 ExecStart=/bin/bash -c "\
   ROOT_URI=$(etcdctl get /ft/config/services-definition-root-uri); \
   docker run -v '/etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt' --rm --name %p --env=\"FLEET_ENDPOINT=http://$HOSTNAME:49153\" --env=\"ROOT_URI=$ROOT_URI\" --env=\"DESTROY=true\" coco/coco-fleet-deployer:$DOCKER_APP_VERSION"
+ExecStop=/usr/bin/docker stop -t 3 %p
+Restart=on-failure
+RestartSec=10
+
