@@ -147,11 +147,7 @@ func (d *deployer) deployUnit(wantedUnit *schema.Unit) error {
 	return nil
 }
 
-func (d *deployer) destroyUnwanted(wantedUnits map[string]*schema.Unit) error {
-	currentUnits, err := d.buildCurrentUnits()
-	if err != nil {
-		return err
-	}
+func (d *deployer) destroyUnwanted(wantedUnits, currentUnits map[string]*schema.Unit) error {
 	for _, u := range currentUnits {
 		if wantedUnits[u.Name] == nil {
 			//Do not destroy the deployer itself
@@ -164,25 +160,18 @@ func (d *deployer) destroyUnwanted(wantedUnits map[string]*schema.Unit) error {
 		}
 	}
 	return nil
-
 }
 
-func (d *deployer) launchAll(wantedUnits map[string]*schema.Unit) error {
-	//Not sure why we got them all again for this step? Perhaps when we did a soft destroy?
-	//currentUnits, err := d.buildCurrentUnits()
-	//if err != nil {
-	//	return err
-	//}
-
-	// start everything that should be started
+func (d *deployer) launchAll(wantedUnits, currentUnits map[string]*schema.Unit) error {
 	for _, u := range wantedUnits {
 		if u.DesiredState == "" {
 			u.DesiredState = "launched"
 		}
-		log.Printf("INFO Desired state: %s", u.DesiredState)
-		err := d.fleetapi.SetUnitTargetState(u.Name, u.DesiredState)
-		if err != nil {
-			return err
+		if currentUnits[u.Name].DesiredState != u.DesiredState {
+			err := d.fleetapi.SetUnitTargetState(u.Name, u.DesiredState)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -206,13 +195,18 @@ func (d *deployer) deployAll() error {
 		}
 	}
 
+	currentUnits, err := d.buildCurrentUnits()
+	if err != nil {
+		return err
+	}
+
 	// remove any unwanted units if enabled
-	err = d.destroyUnwanted(wantedUnits)
+	err = d.destroyUnwanted(wantedUnits, currentUnits)
 	if err != nil {
 		return err
 	}
 	// launch all units in the cluster
-	err = d.launchAll(wantedUnits)
+	err = d.launchAll(wantedUnits, currentUnits)
 	if err != nil {
 		return err
 	}
