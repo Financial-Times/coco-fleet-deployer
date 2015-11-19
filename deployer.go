@@ -4,11 +4,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/coreos/fleet/client"
-	"github.com/coreos/fleet/schema"
-	"github.com/coreos/fleet/unit"
-	"golang.org/x/net/proxy"
-	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"log"
 	"net"
@@ -16,6 +11,12 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/coreos/fleet/client"
+	"github.com/coreos/fleet/schema"
+	"github.com/coreos/fleet/unit"
+	"golang.org/x/net/proxy"
+	"gopkg.in/yaml.v2"
 )
 
 var (
@@ -70,11 +71,11 @@ func (hsdc *httpServiceDefinitionClient) servicesDefinition() (services, error) 
 }
 
 func (hsdc *httpServiceDefinitionClient) serviceFile(service service) ([]byte, error) {
-	serviceFileUri, err := buildServiceFileUri(service, hsdc.rootURI)
+	serviceFileURI, err := buildServiceFileURI(service, hsdc.rootURI)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := hsdc.httpClient.Get(serviceFileUri)
+	resp, err := hsdc.httpClient.Get(serviceFileURI)
 	if err != nil {
 		return nil, err
 	}
@@ -165,25 +166,122 @@ func (d *deployer) destroyUnwanted(wantedUnits, currentUnits map[string]*schema.
 	return nil
 }
 
-func (d *deployer) launchAll(wantedUnits, currentUnits map[string]*schema.Unit) error {
+func (d *deployer) launchAll(wantedUnits, currentUnits map[string]*schema.Unit, serviceCount map[string]int) error {
+	deployedUnits := make(map[string]bool)
+
 	for _, u := range wantedUnits {
+		// unit may have already been deployed - all nodes of a service get deployed,
+		// when the first one appears in the wanted list
+		if _, ok := deployedUnits[u.Name]; ok {
+			continue
+		}
+
 		if u.DesiredState == "" {
 			u.DesiredState = "launched"
 		}
+
+		//units that are changed are set to Inactive in deployUnit()
 		if currentUnits[u.Name].DesiredState != u.DesiredState {
-			err := d.fleetapi.SetUnitTargetState(u.Name, u.DesiredState)
+
+			if !needsSequentialDeployment(u.Name, serviceCount) {
+				err := d.fleetapi.SetUnitTargetState(u.Name, u.DesiredState)
+				if err != nil {
+					return err
+				}
+				continue
+			}
+
+			deployed, err := d.performSequentialDeployment(u, serviceCount)
 			if err != nil {
 				return err
 			}
+			for k, v := range deployed {
+				deployedUnits[k] = v
+			}
 		}
 	}
+
 	return nil
+}
+
+func (d *deployer) performSequentialDeployment(u *schema.Unit, serviceCount map[string]int) (map[string]bool, error) {
+	deployedUnits := make(map[string]bool)
+	serviceName := strings.Split(u.Name, "@")[0]
+	nrOfNodes := serviceCount[serviceName]
+
+	for i := 1; i <= nrOfNodes; i++ {
+		// generate unit name with number - the one we have originally might not be
+		// the 1st node
+		unitName := fmt.Sprintf("%v@%d%v", serviceName, i, ".service")
+
+		// start the service
+		err := d.fleetapi.SetUnitTargetState(unitName, u.DesiredState)
+		if err != nil {
+			return nil, err
+		}
+
+		sidekickName := strings.Replace(unitName, "@", "-sidekick@", 1)
+
+		//record the fact we deployed these
+		deployedUnits[unitName] = true
+		deployedUnits[sidekickName] = true
+
+		//if it's the last one of the cluster, we're done
+		if i == nrOfNodes {
+			break
+		}
+
+		// every second, check if the corresponding sidekick is up
+		// we do this for a maximum of 1 minute
+		timeoutChan := make(chan bool)
+		go func() {
+			<-time.After(time.Duration(60) * time.Second)
+			close(timeoutChan)
+		}()
+
+		tickerChan := time.NewTicker(time.Duration(1) * time.Second)
+
+		for {
+			sidekickStatus, err := d.fleetapi.Unit(sidekickName)
+			if err != nil {
+				return nil, err
+			}
+			if sidekickStatus.CurrentState == "launched" {
+				tickerChan.Stop()
+				break
+			}
+
+			select {
+			case <-tickerChan.C:
+				continue
+			case <-timeoutChan:
+				tickerChan.Stop()
+				log.Printf("WARN Service [%v] didn't start up in time", unitName)
+				break
+			}
+		}
+	}
+	return deployedUnits, nil
+}
+
+// Sidekicks and single-node applications don't need sequential deployment
+func needsSequentialDeployment(unitName string, serviceCount map[string]int) bool {
+	if strings.Contains(unitName, "sidekick") {
+		return false
+	}
+
+	serviceName := strings.Split(unitName, "@")[0]
+	if _, ok := serviceCount[serviceName]; ok {
+		return true
+	}
+
+	return false
 }
 
 func (d *deployer) deployAll() error {
 	// Get service definition - wanted units
 	//get whitelist
-	wantedUnits, err := d.buildWantedUnits()
+	wantedUnits, serviceCount, err := d.buildWantedUnits()
 
 	if err != nil {
 		return err
@@ -191,7 +289,7 @@ func (d *deployer) deployAll() error {
 
 	// create any missing units
 	for _, u := range wantedUnits {
-		err = d.deployUnit(u)
+		err = d.deployUnit(u) //replaces old with new units, stops sk
 		if err != nil {
 			log.Printf("WARNING Failed to deploy unit %s: %v [SKIPPING]", u.Name, err)
 			continue
@@ -209,7 +307,7 @@ func (d *deployer) deployAll() error {
 		return err
 	}
 	// launch all units in the cluster
-	err = d.launchAll(wantedUnits, currentUnits)
+	err = d.launchAll(wantedUnits, currentUnits, serviceCount)
 	if err != nil {
 		return err
 	}
@@ -288,7 +386,7 @@ func newDeployer() (*deployer, error) {
 	return &deployer{fleetapi: fleetHTTPAPIClient, serviceDefinitionClient: serviceDefinitionClient}, nil
 }
 
-func buildServiceFileUri(service service, rootURI string) (string, error) {
+func buildServiceFileURI(service service, rootURI string) (string, error) {
 	if strings.HasPrefix(service.URI, "http") == true {
 		return service.URI, nil
 	}
@@ -299,12 +397,15 @@ func buildServiceFileUri(service service, rootURI string) (string, error) {
 	return uri, nil
 }
 
-func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, error) {
+func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, map[string]int, error) {
 	units := make(map[string]*schema.Unit)
+	serviceCount := make(map[string]int)
+
 	servicesDefinition, err := d.serviceDefinitionClient.servicesDefinition()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+
 	for _, srv := range servicesDefinition.Services {
 		vars := make(map[string]interface{})
 		serviceTemplate, err := d.serviceDefinitionClient.serviceFile(srv)
@@ -316,7 +417,7 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, error) {
 		serviceFile, err := renderedServiceFile(serviceTemplate, vars)
 		if err != nil {
 			log.Printf("%v", err)
-			return nil, err
+			return nil, nil, err
 		}
 
 		// fleet deploy
@@ -346,12 +447,13 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, error) {
 				}
 
 				units[u.Name] = u
+				serviceCount[strings.Split(srv.Name, "@")[0]] = srv.Count
 			}
 		} else {
 			log.Printf("WARNING skipping service: %s, incorrect service definition", srv.Name)
 		}
 	}
-	return units, nil
+	return units, serviceCount, nil
 }
 
 func (d *deployer) buildCurrentUnits() (map[string]*schema.Unit, error) {

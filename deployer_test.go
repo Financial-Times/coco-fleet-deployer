@@ -2,12 +2,13 @@ package main
 
 import (
 	"errors"
-	"gopkg.in/yaml.v2"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v2"
 )
 
 var badServiceYaml = []byte(`---
@@ -102,7 +103,7 @@ func (msdc *mockGoodServiceDefinitionClient) serviceFile(service service) ([]byt
 func TestBuildWantedUnitsBad(t *testing.T) {
 	mockServiceDefinitionClient := &mockBadServiceDefinitionClient{}
 	d := &deployer{serviceDefinitionClient: mockServiceDefinitionClient}
-	wantedUnits, err := d.buildWantedUnits()
+	wantedUnits, _, err := d.buildWantedUnits()
 	if err != nil {
 		t.Errorf("wanted units threw an error: %v", err)
 	}
@@ -122,7 +123,7 @@ func TestBuildWantedUnitsBad(t *testing.T) {
 func TestBuildWantedUnitsGood(t *testing.T) {
 	mockServiceDefinitionClient := &mockGoodServiceDefinitionClient{}
 	d := &deployer{serviceDefinitionClient: mockServiceDefinitionClient}
-	wantedUnits, err := d.buildWantedUnits()
+	wantedUnits, _, err := d.buildWantedUnits()
 	if err != nil {
 		t.Errorf("wanted units threw an error: %v", err)
 	}
@@ -142,7 +143,7 @@ func TestBuildWantedUnitsGood(t *testing.T) {
 func TestBuildDesiredStateHandling(t *testing.T) {
 	mockServiceDefinitionClient := &mockGoodServiceDefinitionClient{}
 	d := &deployer{serviceDefinitionClient: mockServiceDefinitionClient}
-	wantedUnits, _ := d.buildWantedUnits()
+	wantedUnits, _, _ := d.buildWantedUnits()
 	//TODO would be nice to look at whats being passed to fleet here and assert on that
 	//d.launchAll(wantedUnits)
 
