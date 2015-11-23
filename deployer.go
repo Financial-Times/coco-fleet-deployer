@@ -212,7 +212,7 @@ func (d *deployer) performSequentialDeployment(u *schema.Unit, serviceCount map[
 	for i := 1; i <= nrOfNodes; i++ {
 		// generate unit name with number - the one we have originally might not be
 		// the 1st node
-		unitName := fmt.Sprintf("%v@%d%v", serviceName, i, ".service")
+		unitName := fmt.Sprintf("%v@%d%v", serviceName, i, strings.Split(u.Name, ".")[1])
 
 		// start the service
 		err := d.fleetapi.SetUnitTargetState(unitName, u.DesiredState)
@@ -235,24 +235,25 @@ func (d *deployer) performSequentialDeployment(u *schema.Unit, serviceCount map[
 		// we do this for a maximum of 1 minute
 		timeoutChan := make(chan bool)
 		go func() {
-			<-time.After(time.Duration(60) * time.Second)
+			<-time.After(time.Duration(5) * time.Minute)
 			close(timeoutChan)
 		}()
 
-		tickerChan := time.NewTicker(time.Duration(1) * time.Second)
+		tickerChan := time.NewTicker(time.Duration(30) * time.Second)
 
 		for {
-			sidekickStatus, err := d.fleetapi.Unit(sidekickName)
-			if err != nil {
-				return nil, err
-			}
-			if sidekickStatus.CurrentState == "launched" {
-				tickerChan.Stop()
-				break
-			}
-
 			select {
 			case <-tickerChan.C:
+				sidekickStatus, err := d.fleetapi.Unit(sidekickName)
+				if err != nil {
+					return nil, err
+				}
+
+				if sidekickStatus.CurrentState == "launched" {
+					tickerChan.Stop()
+					break
+				}
+
 				continue
 			case <-timeoutChan:
 				tickerChan.Stop()
