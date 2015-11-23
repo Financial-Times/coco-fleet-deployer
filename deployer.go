@@ -32,11 +32,12 @@ type services struct {
 }
 
 type service struct {
-	Name         string `yaml:"name"`
-	Version      string `yaml:"version"`
-	Count        int    `yaml:"count"`
-	URI          string `yaml:"uri"`
-	DesiredState string `yaml:"desiredState"`
+	Name                 string `yaml:"name"`
+	Version              string `yaml:"version"`
+	Count                int    `yaml:"count"`
+	URI                  string `yaml:"uri"`
+	DesiredState         string `yaml:"desiredState"`
+	SequentialDeployment bool   `yaml:"sequentialDeployment"`
 }
 
 type serviceDefinitionClient interface {
@@ -448,7 +449,9 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, map[string]int, 
 				}
 
 				units[u.Name] = u
-				serviceCount[strings.Split(srv.Name, "@")[0]] = srv.Count
+				if srv.SequentialDeployment {
+					serviceCount[strings.Split(srv.Name, "@")[0]] = srv.Count
+				}
 			}
 		} else {
 			log.Printf("WARNING skipping service: %s, incorrect service definition", srv.Name)
