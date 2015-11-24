@@ -50,6 +50,11 @@ type httpServiceDefinitionClient struct {
 	rootURI    string
 }
 
+type zddInfo struct {
+	unit  *schema.Unit
+	count int
+}
+
 func renderServiceDefinitionYaml(serviceYaml []byte) (services services, err error) {
 	if err = yaml.Unmarshal(serviceYaml, &services); err != nil {
 		panic(err)
@@ -167,7 +172,7 @@ func (d *deployer) destroyUnwanted(wantedUnits, currentUnits map[string]*schema.
 	return nil
 }
 
-func (d *deployer) launchAll(wantedUnits, currentUnits map[string]*schema.Unit, serviceCount map[string]int) error {
+func (d *deployer) launchAll(wantedUnits, currentUnits map[string]*schema.Unit, zddUnits map[string]zddInfo) error {
 	deployedUnits := make(map[string]bool)
 
 	for _, u := range wantedUnits {
@@ -183,8 +188,7 @@ func (d *deployer) launchAll(wantedUnits, currentUnits map[string]*schema.Unit, 
 
 		//units that are changed are set to Inactive in deployUnit()
 		if currentUnits[u.Name].DesiredState != u.DesiredState {
-
-			if !needsSequentialDeployment(u.Name, serviceCount) {
+			if _, ok := zddUnits[u.Name]; !ok {
 				err := d.fleetapi.SetUnitTargetState(u.Name, u.DesiredState)
 				if err != nil {
 					return err
@@ -192,7 +196,7 @@ func (d *deployer) launchAll(wantedUnits, currentUnits map[string]*schema.Unit, 
 				continue
 			}
 
-			deployed, err := d.performSequentialDeployment(u, serviceCount)
+			deployed, err := d.performSequentialDeployment(u, zddUnits)
 			if err != nil {
 				return err
 			}
@@ -205,15 +209,19 @@ func (d *deployer) launchAll(wantedUnits, currentUnits map[string]*schema.Unit, 
 	return nil
 }
 
-func (d *deployer) performSequentialDeployment(u *schema.Unit, serviceCount map[string]int) (map[string]bool, error) {
+func (d *deployer) performSequentialDeployment(u *schema.Unit, zddUnits map[string]zddInfo) (map[string]bool, error) {
 	deployedUnits := make(map[string]bool)
 	serviceName := strings.Split(u.Name, "@")[0]
-	nrOfNodes := serviceCount[serviceName]
+	nrOfNodes := zddUnits[u.Name].count
 
 	for i := 1; i <= nrOfNodes; i++ {
 		// generate unit name with number - the one we have originally might not be
 		// the 1st node
 		unitName := fmt.Sprintf("%v@%d.%v", serviceName, i, strings.Split(u.Name, ".")[1])
+
+		//if it's a new unit, create it, if not, destroy current one, create wanted one
+		//wanted one is the one passed as param
+		d.deployUnit(zddUnits[unitName].unit)
 
 		// start the service
 		err := d.fleetapi.SetUnitTargetState(unitName, u.DesiredState)
@@ -233,7 +241,7 @@ func (d *deployer) performSequentialDeployment(u *schema.Unit, serviceCount map[
 		}
 
 		// every second, check if the corresponding sidekick is up
-		// we do this for a maximum of 1 minute
+		// we do this for a maximum of 5 minutes
 		timeoutChan := make(chan bool)
 		go func() {
 			<-time.After(time.Duration(5) * time.Minute)
@@ -268,24 +276,10 @@ func (d *deployer) performSequentialDeployment(u *schema.Unit, serviceCount map[
 	return deployedUnits, nil
 }
 
-// Sidekicks and single-node applications don't need sequential deployment
-func needsSequentialDeployment(unitName string, serviceCount map[string]int) bool {
-	if strings.Contains(unitName, "sidekick") {
-		return false
-	}
-
-	serviceName := strings.Split(unitName, "@")[0]
-	if _, ok := serviceCount[serviceName]; ok {
-		return true
-	}
-
-	return false
-}
-
 func (d *deployer) deployAll() error {
 	// Get service definition - wanted units
 	//get whitelist
-	wantedUnits, serviceCount, err := d.buildWantedUnits()
+	wantedUnits, zddUnits, err := d.buildWantedUnits()
 
 	if err != nil {
 		return err
@@ -293,6 +287,9 @@ func (d *deployer) deployAll() error {
 
 	// create any missing units
 	for _, u := range wantedUnits {
+		if _, ok := zddUnits[u.Name]; ok {
+			continue
+		}
 		err = d.deployUnit(u) //replaces old with new units, stops sk
 		if err != nil {
 			log.Printf("WARNING Failed to deploy unit %s: %v [SKIPPING]", u.Name, err)
@@ -311,7 +308,7 @@ func (d *deployer) deployAll() error {
 		return err
 	}
 	// launch all units in the cluster
-	err = d.launchAll(wantedUnits, currentUnits, serviceCount)
+	err = d.launchAll(wantedUnits, currentUnits, zddUnits)
 	if err != nil {
 		return err
 	}
@@ -401,9 +398,9 @@ func buildServiceFileURI(service service, rootURI string) (string, error) {
 	return uri, nil
 }
 
-func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, map[string]int, error) {
+func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, map[string]zddInfo, error) {
 	units := make(map[string]*schema.Unit)
-	serviceCount := make(map[string]int)
+	zddUnits := make(map[string]zddInfo)
 
 	servicesDefinition, err := d.serviceDefinitionClient.servicesDefinition()
 	if err != nil {
@@ -452,14 +449,14 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, map[string]int, 
 
 				units[u.Name] = u
 				if srv.SequentialDeployment {
-					serviceCount[strings.Split(srv.Name, "@")[0]] = srv.Count
+					zddUnits[u.Name] = zddInfo{u, srv.Count}
 				}
 			}
 		} else {
 			log.Printf("WARNING skipping service: %s, incorrect service definition", srv.Name)
 		}
 	}
-	return units, serviceCount, nil
+	return units, zddUnits, nil
 }
 
 func (d *deployer) buildCurrentUnits() (map[string]*schema.Unit, error) {
