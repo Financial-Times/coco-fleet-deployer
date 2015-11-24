@@ -213,7 +213,7 @@ func (d *deployer) performSequentialDeployment(u *schema.Unit, serviceCount map[
 	for i := 1; i <= nrOfNodes; i++ {
 		// generate unit name with number - the one we have originally might not be
 		// the 1st node
-		unitName := fmt.Sprintf("%v@%d%v", serviceName, i, strings.Split(u.Name, ".")[1])
+		unitName := fmt.Sprintf("%v@%d.%v", serviceName, i, strings.Split(u.Name, ".")[1])
 
 		// start the service
 		err := d.fleetapi.SetUnitTargetState(unitName, u.DesiredState)
@@ -250,6 +250,7 @@ func (d *deployer) performSequentialDeployment(u *schema.Unit, serviceCount map[
 					return nil, err
 				}
 
+				fmt.Printf("INFO Sidekick status: [%v]\n", sidekickStatus.CurrentState)
 				if sidekickStatus.CurrentState == "launched" {
 					tickerChan.Stop()
 					break
@@ -261,6 +262,7 @@ func (d *deployer) performSequentialDeployment(u *schema.Unit, serviceCount map[
 				log.Printf("WARN Service [%v] didn't start up in time", unitName)
 				break
 			}
+			break
 		}
 	}
 	return deployedUnits, nil
