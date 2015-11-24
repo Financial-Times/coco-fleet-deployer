@@ -176,6 +176,20 @@ func (d *deployer) launchAll(wantedUnits, currentUnits map[string]*schema.Unit, 
 	deployedUnits := make(map[string]bool)
 
 	for _, u := range wantedUnits {
+
+		//because we are not calling deployUnit before, have to do this check here
+		currentUnit, err := d.fleetapi.Unit(u.Name)
+		if err != nil {
+			return err
+		}
+
+		if currentUnit == nil {
+			err := d.fleetapi.CreateUnit(u)
+			if err != nil {
+				return err
+			}
+		}
+
 		// unit may have already been deployed - all nodes of a service get deployed,
 		// when the first one appears in the wanted list
 		if _, ok := deployedUnits[u.Name]; ok {
@@ -258,7 +272,7 @@ func (d *deployer) performSequentialDeployment(u *schema.Unit, zddUnits map[stri
 					return nil, err
 				}
 
-				fmt.Printf("INFO Sidekick status: [%v]\n", sidekickStatus.CurrentState)
+				log.Printf("INFO Sidekick status: [%v]\n", sidekickStatus.CurrentState)
 				if sidekickStatus.CurrentState == "launched" {
 					tickerChan.Stop()
 					break
