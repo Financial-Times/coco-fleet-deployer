@@ -15,7 +15,6 @@ import (
 	"github.com/coreos/fleet/client"
 	"github.com/coreos/fleet/schema"
 	"github.com/coreos/fleet/unit"
-	"github.com/kr/pretty"
 	"golang.org/x/net/proxy"
 	"gopkg.in/yaml.v2"
 )
@@ -128,37 +127,24 @@ func main() {
 	}
 }
 
-func (d *deployer) deployUnit(wantedUnit *schema.Unit) error {
-	currentUnit, err := d.fleetapi.Unit(wantedUnit.Name)
+func (d *deployer) isNewUnit(u *schema.Unit) (bool, error) {
+	currentUnit, err := d.fleetapi.Unit(u.Name)
 	if err != nil {
-		return err
+		return false, err
 	}
-	if currentUnit == nil {
-		err := d.fleetapi.CreateUnit(wantedUnit)
-		if err != nil {
-			return err
-		}
-		return nil
+	return currentUnit == nil, nil
+}
+
+func (d *deployer) isUpdatedUnit(newUnit *schema.Unit) (bool, error) {
+	currentUnit, err := d.fleetapi.Unit(newUnit.Name)
+	if err != nil {
+		return false, err
 	}
 
-	wuf := schema.MapSchemaUnitOptionsToUnitFile(wantedUnit.Options)
+	nuf := schema.MapSchemaUnitOptionsToUnitFile(newUnit.Options)
 	cuf := schema.MapSchemaUnitOptionsToUnitFile(currentUnit.Options)
 
-	log.Printf("Wanted Unit: %# v", pretty.Formatter(wuf))
-	log.Printf("Current Unit: %# v", pretty.Formatter(cuf))
-	if wuf.Hash() != cuf.Hash() {
-		log.Printf("INFO Service %s differs from the cluster version", wantedUnit.Name)
-		wantedUnit.DesiredState = "inactive"
-		err = d.fleetapi.DestroyUnit(wantedUnit.Name)
-		if err != nil {
-			return err
-		}
-		err = d.fleetapi.CreateUnit(wantedUnit)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	return nuf.Hash() != cuf.Hash(), nil
 }
 
 func (d *deployer) destroyUnwanted(wantedUnits, currentUnits map[string]*schema.Unit) error {
@@ -177,29 +163,9 @@ func (d *deployer) destroyUnwanted(wantedUnits, currentUnits map[string]*schema.
 }
 
 func (d *deployer) launchAll(wantedUnits, currentUnits map[string]*schema.Unit, zddUnits map[string]zddInfo) error {
-	deployedUnits := make(map[string]bool)
-
-	for _, u := range wantedUnits {
-		currentUnit, err := d.fleetapi.Unit(u.Name)
-		if err != nil {
-			return err
-		}
-
-		if currentUnit == nil {
-			err := d.fleetapi.CreateUnit(u)
-			currentUnits[u.Name] = u
-			if err != nil {
-				return err
-			}
-		}
-	}
-
 	for _, u := range wantedUnits {
 		// unit may have already been deployed - all nodes of a service get deployed,
 		// when the first one appears in the wanted list
-		if _, ok := deployedUnits[u.Name]; ok {
-			continue
-		}
 
 		if u.DesiredState == "" {
 			u.DesiredState = "launched"
@@ -207,21 +173,11 @@ func (d *deployer) launchAll(wantedUnits, currentUnits map[string]*schema.Unit, 
 
 		//units that are changed are set to Inactive in deployUnit()
 		if currentUnits[u.Name].DesiredState != u.DesiredState {
-			if _, ok := zddUnits[u.Name]; !ok {
-				err := d.fleetapi.SetUnitTargetState(u.Name, u.DesiredState)
-				if err != nil {
-					return err
-				}
-				continue
-			}
-
-			deployed, err := d.performSequentialDeployment(u, zddUnits)
+			err := d.fleetapi.SetUnitTargetState(u.Name, u.DesiredState)
 			if err != nil {
 				return err
 			}
-			for k, v := range deployed {
-				deployedUnits[k] = v
-			}
+			continue
 		}
 	}
 
@@ -237,10 +193,6 @@ func (d *deployer) performSequentialDeployment(u *schema.Unit, zddUnits map[stri
 		// generate unit name with number - the one we have originally might not be
 		// the 1st node
 		unitName := fmt.Sprintf("%v@%d.%v", serviceName, i, strings.Split(u.Name, ".")[1])
-
-		//if it's a new unit, create it, if not, destroy current one, create wanted one
-		//wanted one is the one passed as param
-		d.deployUnit(zddUnits[unitName].unit)
 
 		// start the service
 		err := d.fleetapi.SetUnitTargetState(unitName, u.DesiredState)
@@ -299,6 +251,7 @@ func (d *deployer) deployAll() error {
 	// Get service definition - wanted units
 	//get whitelist
 	wantedUnits, zddUnits, err := d.buildWantedUnits()
+	deployedUnits := make(map[string]bool)
 
 	if err != nil {
 		return err
@@ -306,14 +259,56 @@ func (d *deployer) deployAll() error {
 
 	// create any missing units
 	for _, u := range wantedUnits {
-		if _, ok := zddUnits[u.Name]; ok {
-			continue
-		}
-		err = d.deployUnit(u) //replaces old with new units, stops sk
+		isNew, err := d.isNewUnit(u)
 		if err != nil {
 			log.Printf("WARNING Failed to deploy unit %s: %v [SKIPPING]", u.Name, err)
 			continue
 		}
+
+		if isNew {
+			err := d.fleetapi.CreateUnit(u)
+			if err != nil {
+				return err
+			}
+			log.Printf("WARNING Failed to deploy unit %s: %v [SKIPPING]", u.Name, err)
+			continue
+		}
+
+		isUpdated, err := d.isUpdatedUnit(u)
+		if err != nil {
+			log.Printf("WARNING Failed to deploy unit %s: %v [SKIPPING]", u.Name, err)
+			continue
+		}
+
+		if isUpdated {
+			if _, ok := zddUnits[u.Name]; ok {
+				if _, ok := deployedUnits[u.Name]; ok {
+					continue
+				}
+				deployed, err := d.performSequentialDeployment(u, zddUnits)
+				if err != nil {
+					return err
+				}
+				for k, v := range deployed {
+					deployedUnits[k] = v
+				}
+				//do sequential deployment here
+			}
+
+			log.Printf("INFO Service %s differs from the cluster version", u.Name)
+			u.DesiredState = "inactive"
+			err = d.fleetapi.DestroyUnit(u.Name)
+			if err != nil {
+				log.Printf("WARNING Failed to deploy unit %s: %v [SKIPPING]", u.Name, err)
+				continue
+			}
+			err = d.fleetapi.CreateUnit(u)
+			if err != nil {
+				log.Printf("WARNING Failed to deploy unit %s: %v [SKIPPING]", u.Name, err)
+				continue
+			}
+		}
+
 	}
 
 	currentUnits, err := d.buildCurrentUnits()
