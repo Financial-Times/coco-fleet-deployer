@@ -15,6 +15,7 @@ import (
 	"github.com/coreos/fleet/client"
 	"github.com/coreos/fleet/schema"
 	"github.com/coreos/fleet/unit"
+	"github.com/kr/pretty"
 	"golang.org/x/net/proxy"
 	"gopkg.in/yaml.v2"
 )
@@ -142,6 +143,9 @@ func (d *deployer) deployUnit(wantedUnit *schema.Unit) error {
 
 	wuf := schema.MapSchemaUnitOptionsToUnitFile(wantedUnit.Options)
 	cuf := schema.MapSchemaUnitOptionsToUnitFile(currentUnit.Options)
+
+	log.Printf("Wanted Unit: %# v", pretty.Formatter(wuf))
+	log.Printf("Current Unit: %# v", pretty.Formatter(cuf))
 	if wuf.Hash() != cuf.Hash() {
 		log.Printf("INFO Service %s differs from the cluster version", wantedUnit.Name)
 		wantedUnit.DesiredState = "inactive"
@@ -188,7 +192,6 @@ func (d *deployer) launchAll(wantedUnits, currentUnits map[string]*schema.Unit, 
 				return err
 			}
 		}
-		time.Sleep(time.Second * 1)
 	}
 
 	for _, u := range wantedUnits {
