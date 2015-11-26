@@ -267,6 +267,9 @@ func (d *deployer) deployAll() error {
 
 	// create any missing units
 	for _, u := range wantedUnits {
+		//basically reproduce the bahvior of the deployUnit() function but with the
+		//sequential deployment thrown in
+
 		isNew, err := d.isNewUnit(u)
 		if err != nil {
 			log.Printf("WARNING Failed to determine if it's a new unit %s: %v [SKIPPING]", u.Name, err)
@@ -274,7 +277,7 @@ func (d *deployer) deployAll() error {
 		}
 
 		if isNew {
-			log.Printf("Unit [%v] is new", u.Name)
+			log.Printf("DEBUG: Unit [%v] is new", u.Name)
 			err := d.fleetapi.CreateUnit(u)
 			if err != nil {
 				log.Printf("WARNING Failed to create unit %s: %v [SKIPPING]", u.Name, err)
@@ -289,15 +292,16 @@ func (d *deployer) deployAll() error {
 		}
 
 		if !isUpdated {
-			log.Printf("Unit [%v] is not updated", u.Name)
 			continue
 		}
 
-		log.Printf("Unit [%v] is  updated", u.Name)
+		//for updated apps which need zero downtime deployment, we do that here
+		log.Printf("DEBUG Unit [%v] is  updated", u.Name)
 		if _, ok := zddUnits[u.Name]; ok {
-			log.Printf("Unit [%v] is ZDD ", u.Name)
+			log.Printf("DEBUG Unit [%v] is ZDD ", u.Name)
+
 			if _, ok := deployedUnits[u.Name]; ok {
-				log.Printf("Unit [%v] was already deployed", u.Name)
+				log.Printf("DEBUG Unit [%v] was already deployed", u.Name)
 				continue
 			}
 
