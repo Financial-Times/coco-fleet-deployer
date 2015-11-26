@@ -261,7 +261,7 @@ func (d *deployer) deployAll() error {
 	for _, u := range wantedUnits {
 		isNew, err := d.isNewUnit(u)
 		if err != nil {
-			log.Printf("WARNING Failed to deploy unit %s: %v [SKIPPING]", u.Name, err)
+			log.Printf("WARNING Failed to determine if it's a new unit %s: %v [SKIPPING]", u.Name, err)
 			continue
 		}
 
@@ -270,43 +270,49 @@ func (d *deployer) deployAll() error {
 			if err != nil {
 				return err
 			}
-			log.Printf("WARNING Failed to deploy unit %s: %v [SKIPPING]", u.Name, err)
+			log.Printf("WARNING Failed to create unit %s: %v [SKIPPING]", u.Name, err)
 			continue
 		}
 
 		isUpdated, err := d.isUpdatedUnit(u)
 		if err != nil {
-			log.Printf("WARNING Failed to deploy unit %s: %v [SKIPPING]", u.Name, err)
+			log.Printf("WARNING Failed to determine if updated unit %s: %v [SKIPPING]", u.Name, err)
 			continue
 		}
 
-		if isUpdated {
-			if _, ok := zddUnits[u.Name]; ok {
-				if _, ok := deployedUnits[u.Name]; ok {
-					continue
-				}
-				deployed, err := d.performSequentialDeployment(u, zddUnits)
-				if err != nil {
-					return err
-				}
-				for k, v := range deployed {
-					deployedUnits[k] = v
-				}
-				//do sequential deployment here
+		if !isUpdated {
+			continue
+		}
+
+		if _, ok := zddUnits[u.Name]; ok {
+			if _, ok := deployedUnits[u.Name]; ok {
+				continue
 			}
 
-			log.Printf("INFO Service %s differs from the cluster version", u.Name)
-			u.DesiredState = "inactive"
-			err = d.fleetapi.DestroyUnit(u.Name)
+			deployed, err := d.performSequentialDeployment(u, zddUnits)
 			if err != nil {
-				log.Printf("WARNING Failed to deploy unit %s: %v [SKIPPING]", u.Name, err)
-				continue
+				return err
 			}
-			err = d.fleetapi.CreateUnit(u)
-			if err != nil {
-				log.Printf("WARNING Failed to deploy unit %s: %v [SKIPPING]", u.Name, err)
-				continue
+			for k, v := range deployed {
+				deployedUnits[k] = v
 			}
+			continue
+		}
+
+		// continue existing handling for normal services
+		log.Printf("INFO Service %s differs from the cluster version", u.Name)
+		u.DesiredState = "inactive"
+
+		err = d.fleetapi.DestroyUnit(u.Name)
+		if err != nil {
+			log.Printf("WARNING Failed to destroy unit %s: %v [SKIPPING]", u.Name, err)
+			continue
+		}
+
+		err = d.fleetapi.CreateUnit(u)
+		if err != nil {
+			log.Printf("WARNING Failed to create unit %s: %v [SKIPPING]", u.Name, err)
+			continue
 		}
 
 	}
