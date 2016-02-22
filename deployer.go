@@ -118,11 +118,9 @@ func main() {
 	}
 
 	for {
-		log.Printf("Starting deploy run")
 		if err := d.deployAll(); err != nil {
 			log.Fatalf("Failed to run deploy : %v\n", err.Error())
 		}
-		log.Printf("Finished deploy run")
 		time.Sleep(1 * time.Minute)
 	}
 }
