@@ -63,7 +63,13 @@ func renderServiceDefinitionYaml(serviceYaml []byte) (services services, err err
 }
 
 func (hsdc *httpServiceDefinitionClient) servicesDefinition() (services, error) {
-	resp, err := hsdc.httpClient.Get(hsdc.rootURI + "services.yaml")
+	req, err := http.NewRequest("GET", hsdc.rootURI + "services.yaml", nil)
+	if err != nil {
+		return services{}, err
+	}
+	req.Header.Add("Accept", "application/vnd.github.v3.raw+json")
+
+	resp, err := hsdc.httpClient.Do(req)
 	if err != nil {
 		return services{}, err
 	}
@@ -81,7 +87,14 @@ func (hsdc *httpServiceDefinitionClient) serviceFile(service service) ([]byte, e
 	if err != nil {
 		return nil, err
 	}
-	resp, err := hsdc.httpClient.Get(serviceFileURI)
+	req, err := http.NewRequest("GET", serviceFileURI, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Add("Accept", "application/vnd.github.v3.raw+json")
+
+
+	resp, err := hsdc.httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}

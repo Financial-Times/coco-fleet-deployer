@@ -15,7 +15,7 @@ docker build -t coco/coco-fleet-deployer .
 Usage example:
 
 ```bash
-coco-fleet-deployer -fleetEndpoint="http://1.2.3.4:49153" -rootURI="https://raw.githubusercontent.com/Financial-Times/fleet/master/service-files -destroy=true"
+coco-fleet-deployer -fleetEndpoint="http://1.2.3.4:49153" -rootURI="https://api.github.com/repos/Financial-Times/up-service-files/contents/" -destroy=true"
 ```
 
 Also supports socks5 proxies, primarily for ease of use via ssh tunnelling during testing:
@@ -25,5 +25,5 @@ Also supports socks5 proxies, primarily for ease of use via ssh tunnelling durin
 ssh -Nn -D2323 core@$FLEETCTL_TUNNEL &
 
 #Execute the deployer
-coco-fleet-deployer -fleetEndpoint="http://localhost:49153" -rootURI="https://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/" -destroy=true -socksProxy="127.0.0.1:2323"
+coco-fleet-deployer -fleetEndpoint="http://localhost:49153" -rootURI="https://api.github.com/repos/Financial-Times/up-service-files/contents/" -destroy=true -socksProxy="127.0.0.1:2323"
 ```
