@@ -25,6 +25,7 @@ var (
 	socksProxy              = flag.String("socksProxy", "", "address of socks proxy, e.g., 127.0.0.1:9050")
 	destroyServiceBlacklist = map[string]struct{}{"deployer.service": struct{}{}, "deployer.timer": struct{}{}}
 	rootURI                 = flag.String("rootURI", "", "Base uri to use when constructing service file URI. Only used if service file URI is relative.")
+	branchRef               = flag.String("branchRef", "master", "Branch reference to use when constructing service file URI. Defaults to master")
 )
 
 type services struct {
@@ -48,6 +49,7 @@ type serviceDefinitionClient interface {
 type httpServiceDefinitionClient struct {
 	httpClient *http.Client
 	rootURI    string
+	branchRef string
 }
 
 type zddInfo struct {
@@ -63,7 +65,10 @@ func renderServiceDefinitionYaml(serviceYaml []byte) (services services, err err
 }
 
 func (hsdc *httpServiceDefinitionClient) servicesDefinition() (services, error) {
-	req, err := http.NewRequest("GET", hsdc.rootURI + "services.yaml", nil)
+	serviceFileUrl:= hsdc.rootURI + "services.yaml?ref=" + hsdc.branchRef
+
+	log.Println("serviceFileUrl=%v", serviceFileUrl)
+	req, err := http.NewRequest("GET", serviceFileUrl, nil)
 	if err != nil {
 		return services{}, err
 	}
@@ -432,7 +437,7 @@ func newDeployer() (*deployer, error) {
 		log.Println("destroy not enabled (use -destroy to enable)")
 		fleetHTTPAPIClient = noDestroyFleetAPI{fleetHTTPAPIClient}
 	}
-	serviceDefinitionClient := &httpServiceDefinitionClient{httpClient: &http.Client{}, rootURI: *rootURI}
+	serviceDefinitionClient := &httpServiceDefinitionClient{httpClient: &http.Client{}, rootURI: *rootURI, branchRef: *branchRef}
 	return &deployer{fleetapi: fleetHTTPAPIClient, serviceDefinitionClient: serviceDefinitionClient}, nil
 }
 

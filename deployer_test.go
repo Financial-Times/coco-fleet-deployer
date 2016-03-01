@@ -188,7 +188,7 @@ func TestServicesDefinition(t *testing.T) {
 	// Make a transport that reroutes all traffic to the example server
 	transport := &http.Transport{
 		Proxy: func(req *http.Request) (*url.URL, error) {
-			if req.URL.String() == "http://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/services.yaml" {
+			if req.URL.String() == "http://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/services.yaml?ref=master" {
 				return url.Parse(server.URL)
 			}
 			return nil, errors.New("Unexpected url. Failing.")
@@ -198,7 +198,7 @@ func TestServicesDefinition(t *testing.T) {
 	// Make a http.Client with the transport
 	httpClient := &http.Client{Transport: transport}
 
-	serviceDefinitionClient := &httpServiceDefinitionClient{httpClient: httpClient, rootURI: "http://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/"}
+	serviceDefinitionClient := &httpServiceDefinitionClient{httpClient: httpClient, rootURI: "http://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/", branchRef: "master"}
 	services, err := serviceDefinitionClient.servicesDefinition()
 	if len(services.Services) != 7 || err != nil {
 		t.Fatalf("Didn't retrieve services definition: %w", err)
