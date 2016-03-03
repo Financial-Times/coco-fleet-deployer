@@ -70,12 +70,14 @@ func (hsdc *httpServiceDefinitionClient) servicesDefinition() (services, error) 
 	log.Printf("serviceFileUrl=%s\n", serviceFileUrl)
 	req, err := http.NewRequest("GET", serviceFileUrl, nil)
 	if err != nil {
+		log.Printf("Error while building new request: %v", err)
 		return services{}, err
 	}
 	req.Header.Add("Accept", "application/vnd.github.v3.raw+json,*/*")
 
 	resp, err := hsdc.httpClient.Do(req)
 	if err != nil {
+		log.Printf("Error while getting services.yaml: %v", err)
 		return services{}, err
 	}
 	defer resp.Body.Close()
@@ -463,6 +465,7 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, map[string]zddIn
 
 	servicesDefinition, err := d.serviceDefinitionClient.servicesDefinition()
 	if err != nil {
+		log.Printf("Error while building services: %v", err)
 		return nil, nil, err
 	}
 
