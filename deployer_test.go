@@ -218,7 +218,7 @@ func TestServiceFileForMissingUri(t *testing.T) {
 	// Make a transport that reroutes all traffic to the example server
 	transport := &http.Transport{
 		Proxy: func(req *http.Request) (*url.URL, error) {
-			if req.URL.String() == "http://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/deployer.service" {
+			if req.URL.String() == "http://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/deployer.service?ref=master" {
 				return url.Parse(server.URL)
 			}
 			return nil, errors.New("Unexpected url. Failing.")
@@ -228,7 +228,7 @@ func TestServiceFileForMissingUri(t *testing.T) {
 	// Make a http.Client with the transport
 	httpClient := &http.Client{Transport: transport}
 
-	serviceDefinitionClient := &httpServiceDefinitionClient{httpClient: httpClient, rootURI: "http://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/"}
+	serviceDefinitionClient := &httpServiceDefinitionClient{httpClient: httpClient, rootURI: "http://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/", branchRef: "master"}
 	_, err := serviceDefinitionClient.serviceFile(service{Name: "deployer.service"})
 	if err != nil {
 		t.Fatalf("Didn't retrieve service definition: %w", err)
@@ -258,7 +258,7 @@ func TestServiceFileForAbsoluteUri(t *testing.T) {
 	// Make a http.Client with the transport
 	httpClient := &http.Client{Transport: transport}
 
-	serviceDefinitionClient := &httpServiceDefinitionClient{httpClient: httpClient, rootURI: "http://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/"}
+	serviceDefinitionClient := &httpServiceDefinitionClient{httpClient: httpClient, rootURI: "http://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/", branchRef: "master"}
 	_, err := serviceDefinitionClient.serviceFile(service{Name: "deployer.service", URI: "http://mydeployer.com/deployer.service"})
 	if err != nil {
 		t.Fatalf("Didn't retrieve service definition: %w", err)
