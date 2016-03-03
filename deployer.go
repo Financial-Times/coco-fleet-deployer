@@ -65,9 +65,9 @@ func renderServiceDefinitionYaml(serviceYaml []byte) (services services, err err
 }
 
 func (hsdc *httpServiceDefinitionClient) servicesDefinition() (services, error) {
-	serviceFileUrl:= hsdc.rootURI + "services.yaml?ref=" + hsdc.branchRef
+	serviceFileUrl:= fmt.Sprintf("%s%s?ref=%s", hsdc.rootURI, "services.yaml", hsdc.branchRef)
 
-	log.Println("serviceFileUrl=%v", serviceFileUrl)
+	log.Printf("serviceFileUrl=%s\n", serviceFileUrl)
 	req, err := http.NewRequest("GET", serviceFileUrl, nil)
 	if err != nil {
 		return services{}, err
@@ -88,7 +88,7 @@ func (hsdc *httpServiceDefinitionClient) servicesDefinition() (services, error) 
 }
 
 func (hsdc *httpServiceDefinitionClient) serviceFile(service service) ([]byte, error) {
-	serviceFileURI, err := buildServiceFileURI(service, hsdc.rootURI)
+	serviceFileURI, err := buildServiceFileURI(service, hsdc.rootURI, hsdc.branchRef)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +97,7 @@ func (hsdc *httpServiceDefinitionClient) serviceFile(service service) ([]byte, e
 		return nil, err
 	}
 	req.Header.Add("Accept", "application/vnd.github.v3.raw+json")
-
+	log.Printf("serviceFileCall=%s\n", serviceFileURI)
 
 	resp, err := hsdc.httpClient.Do(req)
 	if err != nil {
@@ -441,14 +441,14 @@ func newDeployer() (*deployer, error) {
 	return &deployer{fleetapi: fleetHTTPAPIClient, serviceDefinitionClient: serviceDefinitionClient}, nil
 }
 
-func buildServiceFileURI(service service, rootURI string) (string, error) {
+func buildServiceFileURI(service service, rootURI string, branchRef string) (string, error) {
 	if strings.HasPrefix(service.URI, "http") == true {
 		return service.URI, nil
 	}
 	if rootURI == "" {
 		return "", errors.New("WARNING Service uri isn't absolute and rootURI not specified")
 	}
-	uri := fmt.Sprintf("%s%s", rootURI, service.Name)
+	uri := fmt.Sprintf("%s%s?ref=%s", rootURI, service.Name, branchRef)
 	return uri, nil
 }
 
