@@ -25,7 +25,7 @@ var (
 	socksProxy              = flag.String("socksProxy", "", "address of socks proxy, e.g., 127.0.0.1:9050")
 	destroyServiceBlacklist = map[string]struct{}{"deployer.service": struct{}{}, "deployer.timer": struct{}{}}
 	rootURI                 = flag.String("rootURI", "", "Base uri to use when constructing service file URI. Only used if service file URI is relative.")
-	branchRef               = flag.String("branchRef", "master", "Branch reference to use when constructing service file URI. Defaults to master")
+	branchRef               = flag.String("branchRef", "", "Branch reference to use when constructing service file URI. Defaults to master")
 )
 
 type services struct {
@@ -72,7 +72,7 @@ func (hsdc *httpServiceDefinitionClient) servicesDefinition() (services, error) 
 	if err != nil {
 		return services{}, err
 	}
-	req.Header.Add("Accept", "application/vnd.github.v3.raw+json")
+	req.Header.Add("Accept", "application/vnd.github.v3.raw+json,*/*")
 
 	resp, err := hsdc.httpClient.Do(req)
 	if err != nil {
@@ -96,7 +96,7 @@ func (hsdc *httpServiceDefinitionClient) serviceFile(service service) ([]byte, e
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Add("Accept", "application/vnd.github.v3.raw+json")
+	req.Header.Add("Accept", "application/vnd.github.v3.raw+json,*/*")
 	log.Printf("serviceFileCall=%s\n", serviceFileURI)
 
 	resp, err := hsdc.httpClient.Do(req)
@@ -130,6 +130,11 @@ func main() {
 	if *rootURI == "" {
 		log.Fatal("Services definition file uri is required")
 	}
+
+	if *branchRef == "" {
+		*branchRef = "master"
+	}
+
 	d, err := newDeployer()
 	if err != nil {
 		panic(err)
