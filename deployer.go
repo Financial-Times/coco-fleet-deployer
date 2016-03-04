@@ -62,6 +62,7 @@ func renderServiceDefinitionYaml(serviceYaml []byte) (services services, err err
 		panic(err)
 	}
 	log.Printf("Called service file retrieval, unmarshalled as a yaml file. Services nr: %d", len(services.Services))
+	log.Printf(string(serviceYaml))
 	return
 }
 
