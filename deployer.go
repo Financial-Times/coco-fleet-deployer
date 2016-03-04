@@ -117,6 +117,7 @@ func (hsdc *httpServiceDefinitionClient) serviceFile(service service) ([]byte, e
 		log.Printf("Error while reading request body for service: %v", err)
 		return nil, err
 	}
+	log.Printf(string(serviceTemplate))
 	return serviceTemplate, nil
 }
 
