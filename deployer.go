@@ -61,6 +61,7 @@ func renderServiceDefinitionYaml(serviceYaml []byte) (services services, err err
 	if err = yaml.Unmarshal(serviceYaml, &services); err != nil {
 		panic(err)
 	}
+	log.Printf("Called service file retrieval, unmarshalled as a yaml file. Services nr: %d", len(services.Services))
 	return
 }
 
@@ -92,10 +93,12 @@ func (hsdc *httpServiceDefinitionClient) servicesDefinition() (services, error) 
 func (hsdc *httpServiceDefinitionClient) serviceFile(service service) ([]byte, error) {
 	serviceFileURI, err := buildServiceFileURI(service, hsdc.rootURI, hsdc.branchRef)
 	if err != nil {
+		log.Printf("Error while building uri for request: %v", err)
 		return nil, err
 	}
 	req, err := http.NewRequest("GET", serviceFileURI, nil)
 	if err != nil {
+		log.Printf("Error while building new request for service: %v", err)
 		return nil, err
 	}
 	req.Header.Add("Accept", "application/vnd.github.v3.raw+json,*/*")
@@ -103,12 +106,14 @@ func (hsdc *httpServiceDefinitionClient) serviceFile(service service) ([]byte, e
 
 	resp, err := hsdc.httpClient.Do(req)
 	if err != nil {
+		log.Printf("Error while requesting service: %v", err)
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	serviceTemplate, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
+		log.Printf("Error while reading request body for service: %v", err)
 		return nil, err
 	}
 	return serviceTemplate, nil
@@ -450,6 +455,7 @@ func newDeployer() (*deployer, error) {
 
 func buildServiceFileURI(service service, rootURI string, branchRef string) (string, error) {
 	if strings.HasPrefix(service.URI, "http") == true {
+		log.Printf("Service URI is absolute: %v", service.URI)
 		return service.URI, nil
 	}
 	if rootURI == "" {
@@ -482,7 +488,9 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, map[string]zddIn
 			log.Printf("%v", err)
 			return nil, nil, err
 		}
-
+		if strings.Contains(serviceFile, "varnish") {
+			log.Printf("Service file %s content:\n%s", srv.Name, serviceFile)
+		}
 		// fleet deploy
 		uf, err := unit.NewUnitFile(serviceFile)
 		if err != nil {
@@ -518,6 +526,7 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, map[string]zddIn
 			log.Printf("WARNING skipping service: %s, incorrect service definition", srv.Name)
 		}
 	}
+	log.Printf("Finished run service: %v", err)
 	return units, zddUnits, nil
 }
 
