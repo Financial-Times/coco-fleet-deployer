@@ -24,8 +24,9 @@ var (
 	fleetEndpoint           = flag.String("fleetEndpoint", "", "Fleet API http endpoint: `http://host:port`")
 	socksProxy              = flag.String("socksProxy", "", "address of socks proxy, e.g., 127.0.0.1:9050")
 	destroyServiceBlacklist = map[string]struct{}{"deployer.service": struct{}{}, "deployer.timer": struct{}{}}
-	rootURI                 = flag.String("rootURI", "", "Base uri to use when constructing service file URI. Only used if service file URI is relative.")
+	rootURI                 = flag.String("rootURI", "", "Base uri to use when constructing service file URI. Only used if service file URI is relative")
 	branchRef               = flag.String("branchRef", "", "Branch reference to use when constructing service file URI. Defaults to master")
+	token                   = flag.String("token", "", "Authorization token for getting service file definitions")
 )
 
 type services struct {
@@ -49,85 +50,13 @@ type serviceDefinitionClient interface {
 type httpServiceDefinitionClient struct {
 	httpClient *http.Client
 	rootURI    string
-	branchRef string
+	branchRef  string
+	token      string
 }
 
 type zddInfo struct {
 	unit  *schema.Unit
 	count int
-}
-
-func renderServiceDefinitionYaml(serviceYaml []byte) (services services, err error) {
-	if err = yaml.Unmarshal(serviceYaml, &services); err != nil {
-		panic(err)
-	}
-	log.Printf("Called service file retrieval, unmarshalled as a yaml file. Services nr: %d", len(services.Services))
-	log.Printf(string(serviceYaml))
-	return
-}
-
-func (hsdc *httpServiceDefinitionClient) servicesDefinition() (services, error) {
-	serviceFileUrl:= fmt.Sprintf("%s%s?ref=%s", hsdc.rootURI, "services.yaml", hsdc.branchRef)
-
-	log.Printf("serviceFileUrl=%s\n", serviceFileUrl)
-	req, err := http.NewRequest("GET", serviceFileUrl, nil)
-	if err != nil {
-		log.Printf("Error while building new request: %v", err)
-		return services{}, err
-	}
-	req.Header.Add("Accept", "application/vnd.github.v3.raw+json,*/*")
-
-	resp, err := hsdc.httpClient.Do(req)
-	if err != nil {
-		log.Printf("Error while getting services.yaml: %v", err)
-		return services{}, err
-	}
-	defer resp.Body.Close()
-
-	serviceYaml, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		panic(err)
-	}
-	return renderServiceDefinitionYaml(serviceYaml)
-}
-
-func (hsdc *httpServiceDefinitionClient) serviceFile(service service) ([]byte, error) {
-	serviceFileURI, err := buildServiceFileURI(service, hsdc.rootURI, hsdc.branchRef)
-	if err != nil {
-		log.Printf("Error while building uri for request: %v", err)
-		return nil, err
-	}
-	req, err := http.NewRequest("GET", serviceFileURI, nil)
-	if err != nil {
-		log.Printf("Error while building new request for service: %v", err)
-		return nil, err
-	}
-	req.Header.Add("Accept", "application/vnd.github.v3.raw+json,*/*")
-	log.Printf("serviceFileCall=%s\n", serviceFileURI)
-
-	resp, err := hsdc.httpClient.Do(req)
-	if err != nil {
-		log.Printf("Error while requesting service: %v", err)
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	serviceTemplate, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("Error while reading request body for service: %v", err)
-		return nil, err
-	}
-	log.Printf(string(serviceTemplate))
-	return serviceTemplate, nil
-}
-
-func renderedServiceFile(serviceTemplate []byte, context map[string]interface{}) (string, error) {
-	if context["version"] == "" {
-		return string(serviceTemplate), nil
-	}
-	versionString := fmt.Sprintf("DOCKER_APP_VERSION=%s", context["version"])
-	serviceTemplateString := strings.Replace(string(serviceTemplate), "DOCKER_APP_VERSION=latest", versionString, 1)
-	return serviceTemplateString, nil
 }
 
 func main() {
@@ -157,6 +86,81 @@ func main() {
 		log.Printf("Finished deploy run")
 		time.Sleep(1 * time.Minute)
 	}
+}
+
+func renderServiceDefinitionYaml(serviceYaml []byte) (services services, err error) {
+	if err = yaml.Unmarshal(serviceYaml, &services); err != nil {
+		panic(err)
+	}
+	return
+}
+
+func (hsdc *httpServiceDefinitionClient) servicesDefinition() (services, error) {
+	serviceFileUrl := fmt.Sprintf("%s%s?ref=%s", hsdc.rootURI, "services.yaml", hsdc.branchRef)
+
+	req, err := http.NewRequest("GET", serviceFileUrl, nil)
+	if err != nil {
+		return services{}, err
+	}
+	if hsdc.token != "" {
+		req.Header.Add("Authorization", fmt.Sprintf("token %v", hsdc.token))
+		req.Header.Add("Accept", "application/vnd.github.v3.raw+json")
+	}
+	resp, err := hsdc.httpClient.Do(req)
+	if err != nil {
+		return services{}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("Requesting services.yaml returned %v HTTP status\n", resp.Status)
+		return services{}, errors.New(fmt.Sprintf("Requesting services.yaml file returned %v HTTP status\n", resp.Status))
+	}
+	serviceYaml, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		panic(err)
+	}
+	return renderServiceDefinitionYaml(serviceYaml)
+}
+
+func (hsdc *httpServiceDefinitionClient) serviceFile(service service) ([]byte, error) {
+	serviceFileURI, err := buildServiceFileURI(service, hsdc.rootURI, hsdc.branchRef)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequest("GET", serviceFileURI, nil)
+	if err != nil {
+		return nil, err
+	}
+	if hsdc.token != "" {
+		req.Header.Add("Authorization", fmt.Sprintf("token %v", hsdc.token))
+		req.Header.Add("Accept", "application/vnd.github.v3.raw+json")
+	}
+	resp, err := hsdc.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("Requesting service file %v returned %v HTTP status\n", service.Name, resp.Status)
+		return nil, errors.New(fmt.Sprintf("Requesting service file %v returned %v HTTP status\n", service.Name, resp.Status))
+	}
+
+	serviceTemplate, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	return serviceTemplate, nil
+}
+
+func renderedServiceFile(serviceTemplate []byte, context map[string]interface{}) (string, error) {
+	if context["version"] == "" {
+		return string(serviceTemplate), nil
+	}
+	versionString := fmt.Sprintf("DOCKER_APP_VERSION=%s", context["version"])
+	serviceTemplateString := strings.Replace(string(serviceTemplate), "DOCKER_APP_VERSION=latest", versionString, 1)
+	return serviceTemplateString, nil
 }
 
 func (d *deployer) isNewUnit(u *schema.Unit) (bool, error) {
@@ -451,13 +455,12 @@ func newDeployer() (*deployer, error) {
 		log.Println("destroy not enabled (use -destroy to enable)")
 		fleetHTTPAPIClient = noDestroyFleetAPI{fleetHTTPAPIClient}
 	}
-	serviceDefinitionClient := &httpServiceDefinitionClient{httpClient: &http.Client{}, rootURI: *rootURI, branchRef: *branchRef}
+	serviceDefinitionClient := &httpServiceDefinitionClient{httpClient: &http.Client{}, rootURI: *rootURI, branchRef: *branchRef, token: *token}
 	return &deployer{fleetapi: fleetHTTPAPIClient, serviceDefinitionClient: serviceDefinitionClient}, nil
 }
 
 func buildServiceFileURI(service service, rootURI string, branchRef string) (string, error) {
 	if strings.HasPrefix(service.URI, "http") == true {
-		log.Printf("Service URI is absolute: %v", service.URI)
 		return service.URI, nil
 	}
 	if rootURI == "" {
@@ -489,9 +492,6 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, map[string]zddIn
 		if err != nil {
 			log.Printf("%v", err)
 			return nil, nil, err
-		}
-		if strings.Contains(serviceFile, "varnish") {
-			log.Printf("Service file %s content:\n%s", srv.Name, serviceFile)
 		}
 		// fleet deploy
 		uf, err := unit.NewUnitFile(serviceFile)
@@ -528,7 +528,6 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, map[string]zddIn
 			log.Printf("WARNING skipping service: %s, incorrect service definition", srv.Name)
 		}
 	}
-	log.Printf("Finished run service: %v", err)
 	return units, zddUnits, nil
 }
 
