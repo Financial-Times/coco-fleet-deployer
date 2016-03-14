@@ -77,7 +77,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-
+	log.Printf("rootURI=%v, branchRef=%v, token=%v\n", *rootURI, *branchRef, *token)
 	for {
 		log.Printf("Starting deploy run")
 		if err := d.deployAll(); err != nil {
@@ -92,6 +92,7 @@ func renderServiceDefinitionYaml(serviceYaml []byte) (services services, err err
 	if err = yaml.Unmarshal(serviceYaml, &services); err != nil {
 		panic(err)
 	}
+	log.Printf("Length of services %v\n", len(services.Services))
 	return
 }
 
@@ -136,6 +137,7 @@ func (hsdc *httpServiceDefinitionClient) serviceFile(service service) ([]byte, e
 		req.Header.Add("Authorization", fmt.Sprintf("token %v", hsdc.token))
 		req.Header.Add("Accept", "application/vnd.github.v3.raw+json")
 	}
+	log.Printf("Calling %v, headers: %v\n", req.URL.RawQuery, req.Header)
 	resp, err := hsdc.httpClient.Do(req)
 	if err != nil {
 		return nil, err
@@ -489,6 +491,7 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, map[string]zddIn
 		}
 		vars["version"] = srv.Version
 		serviceFile, err := renderedServiceFile(serviceTemplate, vars)
+		log.Printf("Length of service file %v: %v\n")
 		if err != nil {
 			log.Printf("%v", err)
 			return nil, nil, err
