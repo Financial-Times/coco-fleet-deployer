@@ -492,6 +492,9 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, map[string]zddIn
 		vars["version"] = srv.Version
 		serviceFile, err := renderedServiceFile(serviceTemplate, vars)
 		log.Printf("Length of service file %v: %v\n", srv.Name, len(serviceFile))
+		if strings.Contains(srv.Name, "varnish") {
+			log.Printf("Varnish template file: %v\n", serviceFile)
+		}
 		if err != nil {
 			log.Printf("%v", err)
 			return nil, nil, err
