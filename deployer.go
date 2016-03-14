@@ -137,7 +137,7 @@ func (hsdc *httpServiceDefinitionClient) serviceFile(service service) ([]byte, e
 		req.Header.Add("Authorization", fmt.Sprintf("token %v", hsdc.token))
 		req.Header.Add("Accept", "application/vnd.github.v3.raw+json")
 	}
-	log.Printf("Calling %v, headers: %v\n", req.URL.RawQuery, req.Header)
+	log.Printf("Calling %v, headers: %v\n", req.URL.Path, req.Header)
 	resp, err := hsdc.httpClient.Do(req)
 	if err != nil {
 		return nil, err
@@ -491,7 +491,7 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, map[string]zddIn
 		}
 		vars["version"] = srv.Version
 		serviceFile, err := renderedServiceFile(serviceTemplate, vars)
-		log.Printf("Length of service file %v: %v\n")
+		log.Printf("Length of service file %v: %v\n", srv.Name, len(serviceFile))
 		if err != nil {
 			log.Printf("%v", err)
 			return nil, nil, err
