@@ -23,7 +23,7 @@ var (
 	destroyFlag             = flag.Bool("destroy", false, "Destroy units not found in the definition")
 	fleetEndpoint           = flag.String("fleetEndpoint", "", "Fleet API http endpoint: `http://host:port`")
 	socksProxy              = flag.String("socksProxy", "", "address of socks proxy, e.g., 127.0.0.1:9050")
-	destroyServiceBlacklist = map[string]struct{}{"deployer.service": struct{}{}, "deployer.timer": struct{}{}}
+	destroyServiceBlacklist = map[string]struct{}{"deployer.service": struct{}{}}
 	rootURI                 = flag.String("rootURI", "", "Base uri to use when constructing service file URI. Only used if service file URI is relative.")
 )
 
@@ -117,8 +117,10 @@ func main() {
 		panic(err)
 	}
 
+	branchS := strings.Split(*rootURI, "/")
+	branch := branchS[len(branchS)-2]
 	for {
-		log.Printf("Starting deploy run")
+		log.Printf("Starting deploy run, unit file branch: [%v]", branch)
 		if err := d.deployAll(); err != nil {
 			log.Fatalf("Failed to run deploy : %v\n", err.Error())
 		}
