@@ -201,7 +201,7 @@ func TestServicesDefinition(t *testing.T) {
 	serviceDefinitionClient := &httpServiceDefinitionClient{httpClient: httpClient, rootURI: "http://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/"}
 	services, err := serviceDefinitionClient.servicesDefinition()
 	if len(services.Services) != 7 || err != nil {
-		t.Fatalf("Didn't retrieve services definition: %w", err)
+		t.Fatalf("Didn't retrieve services definition: %s", err.Error())
 	}
 }
 
@@ -231,7 +231,7 @@ func TestServiceFileForMissingUri(t *testing.T) {
 	serviceDefinitionClient := &httpServiceDefinitionClient{httpClient: httpClient, rootURI: "http://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/"}
 	_, err := serviceDefinitionClient.serviceFile(service{Name: "deployer.service"})
 	if err != nil {
-		t.Fatalf("Didn't retrieve service definition: %w", err)
+		t.Fatalf("Didn't retrieve service definition: %s", err.Error())
 	}
 }
 
@@ -261,7 +261,7 @@ func TestServiceFileForAbsoluteUri(t *testing.T) {
 	serviceDefinitionClient := &httpServiceDefinitionClient{httpClient: httpClient, rootURI: "http://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/"}
 	_, err := serviceDefinitionClient.serviceFile(service{Name: "deployer.service", URI: "http://mydeployer.com/deployer.service"})
 	if err != nil {
-		t.Fatalf("Didn't retrieve service definition: %w", err)
+		t.Fatalf("Didn't retrieve service definition: %s", err.Error())
 	}
 
 }

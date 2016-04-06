@@ -400,7 +400,7 @@ func newDeployer() (*deployer, error) {
 		}
 		dialer, err := proxy.SOCKS5("tcp", *socksProxy, nil, netDialler)
 		if err != nil {
-			log.Fatalf("error with proxy %s: %v\n", socksProxy, err)
+			log.Fatalf("error with proxy %s: %v\n", *socksProxy, err)
 		}
 		httpClient.Transport = &http.Transport{
 			Proxy:               http.ProxyFromEnvironment,
