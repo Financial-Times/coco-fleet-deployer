@@ -12,6 +12,7 @@ import (
 	"github.com/coreos/fleet/client"
 	"github.com/coreos/fleet/schema"
 	"github.com/coreos/fleet/unit"
+	"github.com/kr/pretty"
 	"golang.org/x/net/proxy"
 )
 
@@ -62,6 +63,9 @@ func (d *deployer) deployAll() error {
 	// Get service definition - wanted units
 	//get whitelist
 	wantedUnits, zddUnits, err := d.buildWantedUnits()
+	log.Printf("DEBUG wantedUnits: %# v\n", pretty.Formatter(wantedUnits))
+	log.Printf("DEBUG zddUnits: %# v\n", pretty.Formatter(wantedUnits))
+
 	deployedUnits := make(map[string]bool)
 
 	if err != nil {
@@ -346,14 +350,21 @@ func (d *deployer) launchAll(wantedUnits, currentUnits map[string]*schema.Unit, 
 }
 
 func (d *deployer) isUpdatedUnit(newUnit *schema.Unit) (bool, error) {
+	log.Printf("DEBUG Determining if unit [%s] is a an updated unit \n", newUnit.Name)
 	currentUnit, err := d.fleetapi.Unit(newUnit.Name)
 	if err != nil {
 		return false, err
 	}
 
+	log.Printf("DEBUG CurrentUnit for name [%s]: %# v \n", newUnit.Name, pretty.Formatter(currentUnit))
 	nuf := schema.MapSchemaUnitOptionsToUnitFile(newUnit.Options)
 	cuf := schema.MapSchemaUnitOptionsToUnitFile(currentUnit.Options)
 
+	log.Printf("DEBUG New Unitfile: %# v \n", nuf)
+	log.Printf("DEBUG Current Unitfile: %# v \n", cuf)
+	
+	log.Printf("DEBUG New Unitfile hash: [%v] \n", nuf.Hash())
+	log.Printf("DEBUG Current Unitfile hash: [%v] \n", cuf.Hash())
 	return nuf.Hash() != cuf.Hash(), nil
 }
 
