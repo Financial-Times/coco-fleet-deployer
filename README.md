@@ -1,6 +1,8 @@
 #coco-fleet-deployer
 
-An application that continously checks the desired state of a cluster and deploys the new/changed services to the Fleet cluster.
+[![Circle CI](https://circleci.com/gh/Financial-Times/coco-fleet-deployer/tree/master.png?style=shield)](https://circleci.com/gh/Financial-Times/coco-fleet-deployer/tree/master)
+
+An application that continuously checks the desired state of a cluster and deploys the new/changed services to the Fleet cluster.
 
 Building
 ```
