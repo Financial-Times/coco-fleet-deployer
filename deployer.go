@@ -168,13 +168,13 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, map[string]zddIn
 		vars := make(map[string]interface{})
 		serviceTemplate, err := d.serviceDefinitionClient.serviceFile(srv)
 		if err != nil {
-			log.Printf("%v", err)
+			log.Printf("WARNING %v", err)
 			continue
 		}
 		vars["version"] = srv.Version
 		serviceFile, err := renderedServiceFile(serviceTemplate, vars)
 		if err != nil {
-			log.Printf("%v", err)
+			log.Printf("ERROR %v", err)
 			return nil, nil, err
 		}
 

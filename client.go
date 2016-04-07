@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v2"
+	"log"
 )
 
 type httpServiceDefinitionClient struct {
@@ -21,6 +22,11 @@ func (hsdc *httpServiceDefinitionClient) servicesDefinition() (services, error) 
 		return services{}, err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("Requesting services.yaml returned %v HTTP status\n", resp.Status)
+		return services{}, errors.New(fmt.Sprintf("Requesting services.yaml file returned %v HTTP status\n", resp.Status))
+	}
 
 	serviceYaml, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
@@ -39,6 +45,11 @@ func (hsdc *httpServiceDefinitionClient) serviceFile(service service) ([]byte, e
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("Requesting service file %v returned %v HTTP status\n", service.Name, resp.Status)
+		return nil, errors.New(fmt.Sprintf("Requesting service file %v returned %v HTTP status\n", service.Name, resp.Status))
+	}
 
 	serviceTemplate, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
