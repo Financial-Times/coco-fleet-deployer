@@ -164,6 +164,7 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, map[string]zddIn
 	zddUnits := make(map[string]zddInfo)
 
 	servicesDefinition, err := d.serviceDefinitionClient.servicesDefinition()
+	log.Printf("DEBUG Services Definitions: [%# v]\n", pretty.Formatter(servicesDefinition))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -171,12 +172,16 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, map[string]zddIn
 	for _, srv := range servicesDefinition.Services {
 		vars := make(map[string]interface{})
 		serviceTemplate, err := d.serviceDefinitionClient.serviceFile(srv)
+		log.Printf("DEBUG Service Template: [%s]\n", string(serviceTemplate))
+
 		if err != nil {
 			log.Printf("%v", err)
 			continue
 		}
 		vars["version"] = srv.Version
 		serviceFile, err := renderedServiceFile(serviceTemplate, vars)
+		log.Printf("DEBUG Service File : [%s]\n", serviceFile)
+
 		if err != nil {
 			log.Printf("%v", err)
 			return nil, nil, err
@@ -184,6 +189,8 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, map[string]zddIn
 
 		// fleet deploy
 		uf, err := unit.NewUnitFile(serviceFile)
+		log.Printf("DEBUG New Unit File: [%# v]\n", pretty.Formatter(uf))
+		
 		if err != nil {
 			//Broken service file, skip it and continue
 			log.Printf("WARNING service file %s is incorrect: %v [SKIPPING]", srv.Name, err)
@@ -362,7 +369,7 @@ func (d *deployer) isUpdatedUnit(newUnit *schema.Unit) (bool, error) {
 
 	log.Printf("DEBUG New Unitfile: %# v \n", nuf)
 	log.Printf("DEBUG Current Unitfile: %# v \n", cuf)
-	
+
 	log.Printf("DEBUG New Unitfile hash: [%v] \n", nuf.Hash())
 	log.Printf("DEBUG Current Unitfile hash: [%v] \n", cuf.Hash())
 	return nuf.Hash() != cuf.Hash(), nil
