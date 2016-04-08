@@ -172,6 +172,13 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, map[string]zddIn
 	for _, srv := range servicesDefinition.Services {
 		vars := make(map[string]interface{})
 		serviceTemplate, err := d.serviceDefinitionClient.serviceFile(srv)
+		/*
+		service template on output:
+		interprets newlines
+		\ at line endings are left alone
+		\\\"url\\\" - left as it is in the service file
+		*/
+		 
 		log.Printf("DEBUG Service Template: [%s]\n", string(serviceTemplate))
 
 		if err != nil {
@@ -180,6 +187,10 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, map[string]zddIn
 		}
 		vars["version"] = srv.Version
 		serviceFile, err := renderedServiceFile(serviceTemplate, vars)
+		/*
+		Service file on output: 
+		same as service template
+		 */
 		log.Printf("DEBUG Service File : [%s]\n", serviceFile)
 
 		if err != nil {
@@ -189,6 +200,13 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, map[string]zddIn
 
 		// fleet deploy
 		uf, err := unit.NewUnitFile(serviceFile)
+		/*
+		New Unit file on output:
+		does not interpret newline
+		\ at line endings left alone
+		newline is represented as: \\n 
+		\\\\\\\"url\\\\\\\" - escapes every character - 3x\ and 1x"
+		 */
 		log.Printf("DEBUG New Unit File: [%# v]\n", pretty.Formatter(uf))
 		
 		if err != nil {
@@ -364,11 +382,12 @@ func (d *deployer) isUpdatedUnit(newUnit *schema.Unit) (bool, error) {
 	}
 
 	log.Printf("DEBUG CurrentUnit for name [%s]: %# v \n", newUnit.Name, pretty.Formatter(currentUnit))
+	log.Printf("DEBUG NewUnit     for name [%s]: %# v \n", newUnit.Name, pretty.Formatter(newUnit))
 	nuf := schema.MapSchemaUnitOptionsToUnitFile(newUnit.Options)
 	cuf := schema.MapSchemaUnitOptionsToUnitFile(currentUnit.Options)
 
-	log.Printf("DEBUG New Unitfile: %# v \n", nuf)
-	log.Printf("DEBUG Current Unitfile: %# v \n", cuf)
+	log.Printf("DEBUG New Unitfile: %# v \n", pretty.Formatter(nuf))
+	log.Printf("DEBUG Current Unitfile: %# v \n", pretty.Formatter(cuf))
 
 	log.Printf("DEBUG New Unitfile hash: [%v] \n", nuf.Hash())
 	log.Printf("DEBUG Current Unitfile hash: [%v] \n", cuf.Hash())
