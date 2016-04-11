@@ -14,12 +14,16 @@ import (
 	"github.com/coreos/fleet/unit"
 	"github.com/kr/pretty"
 	"golang.org/x/net/proxy"
+	"regexp"
 )
 
 type deployer struct {
 	fleetapi                client.API
 	serviceDefinitionClient serviceDefinitionClient
 }
+
+var whitespaceMatcher, _  = regexp.Compile("\\s+")
+
 
 func newDeployer() (*deployer, error) {
 	u, err := url.Parse(*fleetEndpoint)
@@ -391,10 +395,17 @@ func (d *deployer) isUpdatedUnit(newUnit *schema.Unit) (bool, error) {
 	nuf := schema.MapSchemaUnitOptionsToUnitFile(newUnit.Options)
 	cuf := schema.MapSchemaUnitOptionsToUnitFile(currentUnit.Options)
 
+	for _, option := range nuf.Options{
+		option.Value = whitespaceMatcher.ReplaceAllString(option.Value, " ")
+	}
+	for _, option := range cuf.Options{
+		option.Value = whitespaceMatcher.ReplaceAllString(option.Value, " ")
+	}
+	
 	log.Printf("DEBUG New Unitfile: %# v \n", pretty.Formatter(nuf))
 	log.Printf("DEBUG Current Unitfile: %# v \n", pretty.Formatter(cuf))
 
-	log.Printf("DEBUG New Unitfile hash: [%v] \n", nuf.Hash())
+	log.Printf("DEBUG New Unitfile     hash: [%v] \n", nuf.Hash())
 	log.Printf("DEBUG Current Unitfile hash: [%v] \n", cuf.Hash())
 	return nuf.Hash() != cuf.Hash(), nil
 }
