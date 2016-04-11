@@ -216,7 +216,7 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, map[string]zddIn
 		
 		log.Printf("DEBUG New Unit File: \n[%# v]\n", pretty.Formatter(uf))
 		for _, option := range uf.Options{
-			option.Value =  strings.Replace(option.Value,"\\\n","",-1)
+			option.Value =  strings.Replace(option.Value,"\\\n"," ",-1)
 		}
 		log.Printf("DEBUG New Unit File after newline removal: \n [%# v]\n", pretty.Formatter(uf))
 
