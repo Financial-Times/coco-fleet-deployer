@@ -367,9 +367,7 @@ func (d *deployer) isUpdatedUnit(newUnit *schema.Unit) (bool, error) {
 	for _, option := range cuf.Options{
 		option.Value = whitespaceMatcher.ReplaceAllString(option.Value, " ")
 	}
-	
-	log.Printf("DEBUG New      hash: [%v] \n", nuf.Hash())
-	log.Printf("DEBUG Current  hash: [%v] \n", cuf.Hash())
+
 	return nuf.Hash() != cuf.Hash(), nil
 }
 
