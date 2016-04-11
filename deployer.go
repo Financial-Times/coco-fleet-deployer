@@ -12,7 +12,6 @@ import (
 	"github.com/coreos/fleet/client"
 	"github.com/coreos/fleet/schema"
 	"github.com/coreos/fleet/unit"
-	"github.com/kr/pretty"
 	"golang.org/x/net/proxy"
 	"regexp"
 )
@@ -369,11 +368,8 @@ func (d *deployer) isUpdatedUnit(newUnit *schema.Unit) (bool, error) {
 		option.Value = whitespaceMatcher.ReplaceAllString(option.Value, " ")
 	}
 	
-	log.Printf("DEBUG New Unitfile: %# v \n", pretty.Formatter(nuf))
-	log.Printf("DEBUG Current Unitfile: %# v \n", pretty.Formatter(cuf))
-
-	log.Printf("DEBUG New Unitfile     hash: [%v] \n", nuf.Hash())
-	log.Printf("DEBUG Current Unitfile hash: [%v] \n", cuf.Hash())
+	log.Printf("DEBUG New      hash: [%v] \n", nuf.Hash())
+	log.Printf("DEBUG Current  hash: [%v] \n", cuf.Hash())
 	return nuf.Hash() != cuf.Hash(), nil
 }
 
