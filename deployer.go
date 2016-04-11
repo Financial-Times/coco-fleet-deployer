@@ -207,8 +207,12 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, map[string]zddIn
 		newline is represented as: \\n 
 		\\\\\\\"url\\\\\\\" - escapes every character - 3x\ and 1x"
 		 */
-		log.Printf("DEBUG New Unit File: [%# v]\n", pretty.Formatter(uf))
-		
+		log.Printf("DEBUG New Unit File: \n[%# v]\n", pretty.Formatter(uf))
+		for _, option := range uf.Options{
+			option.Value =  strings.Replace(option.Value,"\\\n","",-1)
+		}
+		log.Printf("DEBUG New Unit File after newline removal: \n [%# v]\n", pretty.Formatter(uf))
+
 		if err != nil {
 			//Broken service file, skip it and continue
 			log.Printf("WARNING service file %s is incorrect: %v [SKIPPING]", srv.Name, err)
