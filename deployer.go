@@ -177,8 +177,6 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, map[string]zddIn
 		}
 		vars["version"] = srv.Version
 		serviceFile, err := renderedServiceFile(serviceTemplate, vars)
-		log.Printf("DEBUG Service File : [%s]\n", serviceFile)
-
 		if err != nil {
 			log.Printf("%v", err)
 			return nil, nil, err
@@ -192,11 +190,9 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, map[string]zddIn
 			continue
 		}
 		
-		log.Printf("DEBUG New Unit File: \n[%# v]\n", pretty.Formatter(uf))
 		for _, option := range uf.Options{
 			option.Value =  strings.Replace(option.Value,"\\\n"," ",-1)
 		}
-		log.Printf("DEBUG New Unit File after newline removal: \n [%# v]\n", pretty.Formatter(uf))
 
 		if srv.Count == 0 && !strings.Contains(srv.Name, "@") {
 			u := &schema.Unit{
