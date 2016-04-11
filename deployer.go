@@ -13,12 +13,15 @@ import (
 	"github.com/coreos/fleet/schema"
 	"github.com/coreos/fleet/unit"
 	"golang.org/x/net/proxy"
+	"regexp"
 )
 
 type deployer struct {
 	fleetapi                client.API
 	serviceDefinitionClient serviceDefinitionClient
 }
+
+var whitespaceMatcher, _  = regexp.Compile("\\s+")
 
 func newDeployer() (*deployer, error) {
 	u, err := url.Parse(*fleetEndpoint)
@@ -184,6 +187,10 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, map[string]zddIn
 			//Broken service file, skip it and continue
 			log.Printf("WARNING service file %s is incorrect: %v [SKIPPING]", srv.Name, err)
 			continue
+		}
+		
+		for _, option := range uf.Options{
+			option.Value =  strings.Replace(option.Value,"\\\n"," ",-1)
 		}
 
 		if srv.Count == 0 && !strings.Contains(srv.Name, "@") {
@@ -353,6 +360,13 @@ func (d *deployer) isUpdatedUnit(newUnit *schema.Unit) (bool, error) {
 
 	nuf := schema.MapSchemaUnitOptionsToUnitFile(newUnit.Options)
 	cuf := schema.MapSchemaUnitOptionsToUnitFile(currentUnit.Options)
+
+	for _, option := range nuf.Options{
+		option.Value = whitespaceMatcher.ReplaceAllString(option.Value, " ")
+	}
+	for _, option := range cuf.Options{
+		option.Value = whitespaceMatcher.ReplaceAllString(option.Value, " ")
+	}
 
 	return nuf.Hash() != cuf.Hash(), nil
 }
