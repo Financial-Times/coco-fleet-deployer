@@ -9,12 +9,12 @@ import (
 	"strings"
 	"time"
 
+	"regexp"
+
 	"github.com/coreos/fleet/client"
 	"github.com/coreos/fleet/schema"
 	"github.com/coreos/fleet/unit"
 	"golang.org/x/net/proxy"
-	"regexp"
-	"github.com/kr/pretty"
 )
 
 type deployer struct {
@@ -22,7 +22,7 @@ type deployer struct {
 	serviceDefinitionClient serviceDefinitionClient
 }
 
-var whitespaceMatcher, _  = regexp.Compile("\\s+")
+var whitespaceMatcher, _ = regexp.Compile("\\s+")
 
 func newDeployer() (*deployer, error) {
 	u, err := url.Parse(*fleetEndpoint)
@@ -104,7 +104,7 @@ func (d *deployer) deployAll() error {
 
 		//for updated apps which need zero downtime deployment, we do that here
 		log.Printf("DEBUG Unit [%v] is  updated", u.Name)
-		log.Printf("DEBUG Unit in full: %# v", pretty.Formatter(u))
+		log.Printf("DEBUG Unit desired state: %s", u.DesiredState)
 		if _, ok := zddUnits[u.Name]; ok {
 			log.Printf("DEBUG Unit [%v] is ZDD ", u.Name)
 
@@ -132,13 +132,14 @@ func (d *deployer) deployAll() error {
 			log.Printf("WARNING Failed to destroy unit %s: %v [SKIPPING]", u.Name, err)
 			continue
 		}
+		log.Printf("DEBUG Unit desired state after destroying: %s", u.DesiredState)
 
 		err = d.fleetapi.CreateUnit(u)
 		if err != nil {
 			log.Printf("WARNING Failed to create unit %s: %v [SKIPPING]", u.Name, err)
 			continue
 		}
-
+		log.Printf("DEBUG Unit desired state after creating: %s", u.DesiredState)
 	}
 
 	currentUnits, err := d.buildCurrentUnits()
@@ -190,9 +191,9 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, map[string]zddIn
 			log.Printf("WARNING service file %s is incorrect: %v [SKIPPING]", srv.Name, err)
 			continue
 		}
-		
-		for _, option := range uf.Options{
-			option.Value =  strings.Replace(option.Value,"\\\n"," ",-1)
+
+		for _, option := range uf.Options {
+			option.Value = strings.Replace(option.Value, "\\\n", " ", -1)
 		}
 
 		if srv.Count == 0 && !strings.Contains(srv.Name, "@") {
@@ -364,10 +365,10 @@ func (d *deployer) isUpdatedUnit(newUnit *schema.Unit) (bool, error) {
 	nuf := schema.MapSchemaUnitOptionsToUnitFile(newUnit.Options)
 	cuf := schema.MapSchemaUnitOptionsToUnitFile(currentUnit.Options)
 
-	for _, option := range nuf.Options{
+	for _, option := range nuf.Options {
 		option.Value = whitespaceMatcher.ReplaceAllString(option.Value, " ")
 	}
-	for _, option := range cuf.Options{
+	for _, option := range cuf.Options {
 		option.Value = whitespaceMatcher.ReplaceAllString(option.Value, " ")
 	}
 
