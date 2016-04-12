@@ -166,6 +166,7 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, map[string]zddIn
 
 	servicesDefinition, err := d.serviceDefinitionClient.servicesDefinition()
 	if err != nil {
+		log.Printf("ERROR Cannot read services definition: [%v]. \nAborting run!", err)
 		return nil, nil, err
 	}
 
@@ -173,8 +174,8 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, map[string]zddIn
 		vars := make(map[string]interface{})
 		serviceTemplate, err := d.serviceDefinitionClient.serviceFile(srv)
 		if err != nil {
-			log.Printf("%v", err)
-			continue
+			log.Printf("ERROR  Cannot read service file for unit [%s]: %v \nAborting run!", srv.Name, err)
+			return nil, nil, err
 		}
 		vars["version"] = srv.Version
 		serviceFile, err := renderedServiceFile(serviceTemplate, vars)
