@@ -104,7 +104,6 @@ func (d *deployer) deployAll() error {
 
 		//for updated apps which need zero downtime deployment, we do that here
 		log.Printf("DEBUG Unit [%v] is  updated", u.Name)
-		log.Printf("DEBUG Unit desired state: %s", u.DesiredState)
 		if _, ok := zddUnits[u.Name]; ok {
 			log.Printf("DEBUG Unit [%v] is ZDD ", u.Name)
 
@@ -132,14 +131,14 @@ func (d *deployer) deployAll() error {
 			log.Printf("WARNING Failed to destroy unit %s: %v [SKIPPING]", u.Name, err)
 			continue
 		}
-		log.Printf("DEBUG Unit desired state after destroying: %s", u.DesiredState)
 
 		err = d.fleetapi.CreateUnit(u)
 		if err != nil {
 			log.Printf("WARNING Failed to create unit %s: %v [SKIPPING]", u.Name, err)
 			continue
 		}
-		log.Printf("DEBUG Unit desired state after creating: %s", u.DesiredState)
+		//destroying a unit sets it's state to 'Inactive'
+		u.DesiredState = ""
 	}
 
 	currentUnits, err := d.buildCurrentUnits()
@@ -342,7 +341,6 @@ func (d *deployer) destroyUnwanted(wantedUnits, currentUnits map[string]*schema.
 
 func (d *deployer) launchAll(wantedUnits, currentUnits map[string]*schema.Unit, zddUnits map[string]zddInfo) error {
 	for _, u := range wantedUnits {
-		log.Printf("Launching [%s], with desired state [%s]", u.Name, u.DesiredState)
 		if u.DesiredState == "" {
 			u.DesiredState = "launched"
 		}
