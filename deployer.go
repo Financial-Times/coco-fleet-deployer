@@ -14,6 +14,7 @@ import (
 	"github.com/coreos/fleet/unit"
 	"golang.org/x/net/proxy"
 	"regexp"
+	"github.com/kr/pretty"
 )
 
 type deployer struct {
@@ -103,6 +104,7 @@ func (d *deployer) deployAll() error {
 
 		//for updated apps which need zero downtime deployment, we do that here
 		log.Printf("DEBUG Unit [%v] is  updated", u.Name)
+		log.Printf("DEBUG Unit in full: %# v", pretty.Formatter(u))
 		if _, ok := zddUnits[u.Name]; ok {
 			log.Printf("DEBUG Unit [%v] is ZDD ", u.Name)
 
@@ -339,6 +341,7 @@ func (d *deployer) destroyUnwanted(wantedUnits, currentUnits map[string]*schema.
 
 func (d *deployer) launchAll(wantedUnits, currentUnits map[string]*schema.Unit, zddUnits map[string]zddInfo) error {
 	for _, u := range wantedUnits {
+		log.Printf("Launching [%s], with desired state [%s]", u.Name, u.DesiredState)
 		if u.DesiredState == "" {
 			u.DesiredState = "launched"
 		}
