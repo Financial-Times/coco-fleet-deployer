@@ -4,7 +4,6 @@ import (
 	"flag"
 	"log"
 	"time"
-
 	"github.com/coreos/fleet/schema"
 )
 
@@ -34,9 +33,9 @@ type serviceDefinitionClient interface {
 	serviceFile(service service) ([]byte, error)
 }
 
-type zddInfo struct {
-	unit  *schema.Unit
-	count int
+type serviceGroup struct {
+	serviceNodes []*schema.Unit
+	sidekicks    []*schema.Unit
 }
 
 func main() {

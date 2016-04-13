@@ -112,7 +112,7 @@ func (d *deployer) deployAll() error {
 				continue
 			}
 
-			deployed, err := d.performSequentialDeployment(u, zddUnits, wantedUnits)
+			deployed, err := d.performSequentialDeployment(u, zddUnits, regularUnits)
 			if err != nil {
 				return err
 			}
@@ -147,12 +147,12 @@ func (d *deployer) deployAll() error {
 	}
 
 	// remove any unwanted units if enabled
-	err = d.destroyUnwanted(wantedUnits, currentUnits)
+	err = d.destroyUnwanted(regularUnits, currentUnits)
 	if err != nil {
 		return err
 	}
 	// launch all units in the cluster
-	err = d.launchAll(wantedUnits, currentUnits, zddUnits)
+	err = d.launchAll(regularUnits, currentUnits, zddUnits)
 	if err != nil {
 		return err
 	}
@@ -160,9 +160,10 @@ func (d *deployer) deployAll() error {
 	return nil
 }
 
-func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, map[string]zddInfo, error) {
-	units := make(map[string]*schema.Unit)
-	zddUnits := make(map[string]zddInfo)
+func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, map[string]serviceGroup, error) {
+	regularUnits := make(map[string]*schema.Unit)
+	zddUnits := make(map[string]serviceGroup)
+	sidekicks := make(map[string]*schema.Unit)
 
 	servicesDefinition, err := d.serviceDefinitionClient.servicesDefinition()
 	if err != nil {
@@ -202,8 +203,7 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, map[string]zddIn
 				Options:      schema.MapUnitFileToSchemaUnitOptions(uf),
 				DesiredState: srv.DesiredState,
 			}
-
-			units[srv.Name] = u
+			regularUnits[srv.Name] = u
 		} else if srv.Count > 0 && strings.Contains(srv.Name, "@") {
 			for i := 0; i < srv.Count; i++ {
 				xName := strings.Replace(srv.Name, "@", fmt.Sprintf("@%d", i+1), -1)
@@ -214,16 +214,35 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, map[string]zddIn
 					DesiredState: srv.DesiredState,
 				}
 
-				units[u.Name] = u
 				if srv.SequentialDeployment {
-					zddUnits[u.Name] = zddInfo{u, srv.Count}
+					namePrefix := strings.Split(srv.Name, "@")[0]
+					if sg, ok := zddUnits[namePrefix]; ok {
+						sg.serviceNodes = append(sg.serviceNodes, u)
+					} else {
+						zddUnits[namePrefix] = serviceGroup{serviceNodes: []*schema.Unit{u}, sidekicks: []*schema.Unit{}}
+					}
+				} else {
+					if strings.Contains(xName, "sidekick") {
+						sidekicks = append(sidekicks, u)
+					} else {
+						regularUnits[u.Name] = u
+					}
 				}
 			}
 		} else {
 			log.Printf("WARNING skipping service: %s, incorrect service definition", srv.Name)
 		}
 	}
-	return units, zddUnits, nil
+	
+	for _, sidekick := range sidekicks {
+		serviceName := strings.Split(sidekick.Name, "-sidekick")[0]
+		if sg, ok := zddUnits[serviceName]; ok {
+			sg.sidekicks = append(sg.sidekicks, sidekick)
+		} else {
+			regularUnits[sidekick.Name] = sidekick
+		}
+	}
+	return regularUnits, zddUnits, nil
 }
 
 func (d *deployer) isNewUnit(u *schema.Unit) (bool, error) {
