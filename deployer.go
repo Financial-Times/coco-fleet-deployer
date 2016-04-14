@@ -14,6 +14,7 @@ import (
 	"github.com/coreos/fleet/client"
 	"github.com/coreos/fleet/schema"
 	"github.com/coreos/fleet/unit"
+	"github.com/kr/pretty"
 	"golang.org/x/net/proxy"
 )
 
@@ -223,6 +224,7 @@ func (d *deployer) buildWantedUnits() (map[string]*schema.Unit, map[string]zddIn
 			log.Printf("WARNING skipping service: %s, incorrect service definition", srv.Name)
 		}
 	}
+	log.Printf("ZDD Units: %# v", pretty.Formatter(zddUnits))
 	return units, zddUnits, nil
 }
 
