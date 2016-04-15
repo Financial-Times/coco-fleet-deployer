@@ -4,6 +4,7 @@ import (
 	"flag"
 	"log"
 	"time"
+
 	"github.com/coreos/fleet/schema"
 )
 
@@ -36,6 +37,7 @@ type serviceDefinitionClient interface {
 type serviceGroup struct {
 	serviceNodes []*schema.Unit
 	sidekicks    []*schema.Unit
+	isZDD        bool
 }
 
 func main() {
