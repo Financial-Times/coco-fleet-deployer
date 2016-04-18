@@ -101,18 +101,18 @@ func (d *deployer) identifyNewServiceGroups(serviceGroups map[string]serviceGrou
 }
 
 func (d *deployer) identifyUpdatedServiceGroups(serviceGroups map[string]serviceGroup) map[string]serviceGroup {
-	updateDServiceGroups := make(map[string]serviceGroup)
+	updatedServiceGroups := make(map[string]serviceGroup)
 	for name, sg := range serviceGroups {
-		isNew, err := d.isUpdatedUnit(sg.serviceNodes[0])
+		isUpdated, err := d.isUpdatedUnit(sg.serviceNodes[0])
 		if err != nil {
 			log.Printf("WARNING Failed to determine if it's a new unit %s: %v [SKIPPING]", sg.serviceNodes[0].Name, err)
 		}
-		if isNew {
-			updateDServiceGroups[name] = sg
+		if isUpdated {
+			updatedServiceGroups[name] = sg
 		}
 		//TODO should a sidekick-only update trigger a service restart too? Only for sequential deployments or generally?
 	}
-	return updateDServiceGroups
+	return updatedServiceGroups
 }
 
 func (d *deployer) identifyDeletedServiceGroups(serviceGroups map[string]serviceGroup) map[string]serviceGroup {
@@ -360,9 +360,8 @@ func renderedServiceFile(serviceTemplate []byte, context map[string]interface{})
 func getServiceName(unitName string) string {
 	if strings.Contains(unitName, "sidekick") {
 		return strings.Split(unitName, "-sidekick")[0]
-	} else {
-		return strings.Split(unitName, ".service")[0]
 	}
+	return strings.Split(unitName, ".service")[0]
 }
 
 func (d *deployer) makeServiceFile(s service) (string, error) {
