@@ -72,10 +72,6 @@ func (d *deployer) deployAll() error {
 	}
 	log.Printf("DEBUG: Wanted Service groups \n: [%# v] \n", pretty.Formatter(wantedServiceGroups))
 
-	d.currentUnits, err = d.buildCurrentUnits()
-	if err != nil {
-		return err
-	}
 
 	toCreate := d.identifyNewServiceGroups(wantedServiceGroups)
 	purgeProcessed(wantedServiceGroups, toCreate)
@@ -83,6 +79,11 @@ func (d *deployer) deployAll() error {
 	toUpdate := d.identifyUpdatedServiceGroups(wantedServiceGroups)
 	purgeProcessed(wantedServiceGroups, toUpdate)
 
+	d.currentUnits, err = d.buildCurrentUnits()
+	if err != nil {
+		return err
+	}
+	
 	toDelete := d.identifyDeletedServiceGroups(wantedServiceGroups)
 	purgeProcessed(wantedServiceGroups, toDelete)
 
