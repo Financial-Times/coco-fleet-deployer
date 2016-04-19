@@ -443,6 +443,7 @@ func updateServiceGroupMap(u *schema.Unit, serviceName string, isSidekick bool, 
 		} else {
 			sg.serviceNodes = append(sg.serviceNodes, u)
 		}
+		serviceGroups[serviceName] = sg
 	} else {
 		log.Printf("Not Found SG")
 		if isSidekick {
