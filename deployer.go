@@ -66,7 +66,7 @@ func newDeployer() (*deployer, error) {
 func (d *deployer) deployAll() error {
 	log.Printf("DEBUG Starting deployAll().")
 	log.Printf("DEBUG ")
-	serviceGroups, err := d.buildWantedUnits()
+	wantedServiceGroups, err := d.buildWantedUnits()
 	if err != nil {
 		return err
 	}
@@ -76,9 +76,9 @@ func (d *deployer) deployAll() error {
 		return err
 	}
 
-	toCreate := d.identifyNewServiceGroups(serviceGroups)
-	toUpdate := d.identifyUpdatedServiceGroups(serviceGroups)
-	toDelete := d.identifyDeletedServiceGroups(serviceGroups)
+	toCreate := d.identifyNewServiceGroups(wantedServiceGroups)
+	toUpdate := d.identifyUpdatedServiceGroups(wantedServiceGroups)
+	toDelete := d.identifyDeletedServiceGroups(wantedServiceGroups)
 
 	log.Printf("DEBUG: Service groups to create: [%v]", toCreate)
 	log.Printf("DEBUG: Service groups to update: [%v]", toUpdate)
@@ -88,7 +88,7 @@ func (d *deployer) deployAll() error {
 	d.updateServiceGroups(toUpdate)
 	d.deleteServiceGroups(toDelete)
 
-	d.launchAll(serviceGroups)
+	d.launchAll(wantedServiceGroups)
 	log.Printf("DEBUG Finished deployAll().")
 	return nil
 }
@@ -126,14 +126,16 @@ func (d *deployer) identifyUpdatedServiceGroups(serviceGroups map[string]service
 	return updatedServiceGroups
 }
 
-func (d *deployer) identifyDeletedServiceGroups(serviceGroups map[string]serviceGroup) map[string]serviceGroup {
+func (d *deployer) identifyDeletedServiceGroups(wantedServiceGroups map[string]serviceGroup) map[string]serviceGroup {
 	log.Printf("DEBUG Started identifyUpdatedServiceGroups().")
 	deletedServiceGroups := make(map[string]serviceGroup)
-	for name, u := range d.currentUnits {
-		if sg, ok := serviceGroups[getServiceName(u.Name)]; !ok {
+	for _, u := range d.currentUnits {
+		serviceName := getServiceName(u.Name)
+		if _, ok := wantedServiceGroups[serviceName]; !ok {
 			//Do not destroy the deployer itself
 			if _, ok := destroyServiceBlacklist[u.Name]; !ok {
-				deletedServiceGroups[name] = sg
+				isSidekick := strings.Contains(u.Name, "sidekick")
+				deletedServiceGroups = updateServiceGroupMap(u, serviceName, isSidekick, deletedServiceGroups)
 			}
 		}
 	}
@@ -181,7 +183,7 @@ func (d *deployer) updateServiceGroups(serviceGroups map[string]serviceGroup) {
 }
 
 func (d *deployer) deleteServiceGroups(serviceGroups map[string]serviceGroup) {
-	log.Printf("DEBUG Starting updateServiceGroups().")
+	log.Printf("DEBUG Starting deleteServiceGroups().")
 	for _, sg := range serviceGroups {
 		for _, u := range sg.serviceNodes {
 			if err := d.fleetapi.DestroyUnit(u.Name); err != nil {
@@ -197,7 +199,7 @@ func (d *deployer) deleteServiceGroups(serviceGroups map[string]serviceGroup) {
 			}
 		}
 	}
-	log.Printf("DEBUG Finish updateServiceGroups().")
+	log.Printf("DEBUG Finish deleteServiceGroups().")
 }
 
 func (d *deployer) buildWantedUnits() (map[string]serviceGroup, error) {
@@ -228,13 +230,13 @@ func (d *deployer) buildWantedUnits() (map[string]serviceGroup, error) {
 		if srv.Count == 0 && !strings.Contains(srv.Name, "@") {
 			log.Printf("DEBUG [%s] non templated service.", serviceName)
 			u := buildUnit(srv.Name, uf, srv.DesiredState)
-			wantedUnits = updateWantedUnits(u, serviceName, isSidekick, wantedUnits)
+			wantedUnits = updateServiceGroupMap(u, serviceName, isSidekick, wantedUnits)
 		} else if srv.Count > 0 && strings.Contains(srv.Name, "@") {
 			log.Printf("DEBUG [%s] templated service.", serviceName)
 			for i := 0; i < srv.Count; i++ {
 				nodeName := strings.Replace(srv.Name, "@", fmt.Sprintf("@%d", i+1), -1)
 				u := buildUnit(nodeName, uf, srv.DesiredState)
-				wantedUnits = updateWantedUnits(u, serviceName, isSidekick, wantedUnits)
+				wantedUnits = updateServiceGroupMap(u, serviceName, isSidekick, wantedUnits)
 
 				if srv.SequentialDeployment {
 					sg, _ := wantedUnits[serviceName]
@@ -429,8 +431,8 @@ func (d *deployer) launchUnit(u *schema.Unit) {
 	}
 }
 
-func updateWantedUnits(u *schema.Unit, serviceName string, isSidekick bool, wantedUnits map[string]serviceGroup) map[string]serviceGroup {
-	if sg, ok := wantedUnits[serviceName]; ok {
+func updateServiceGroupMap(u *schema.Unit, serviceName string, isSidekick bool, serviceGroups map[string]serviceGroup) map[string]serviceGroup {
+	if sg, ok := serviceGroups[serviceName]; ok {
 		if isSidekick {
 			sg.sidekicks = append(sg.sidekicks, u)
 		} else {
@@ -438,12 +440,12 @@ func updateWantedUnits(u *schema.Unit, serviceName string, isSidekick bool, want
 		}
 	} else {
 		if isSidekick {
-			wantedUnits[serviceName] = serviceGroup{serviceNodes: []*schema.Unit{}, sidekicks: []*schema.Unit{u}}
+			serviceGroups[serviceName] = serviceGroup{serviceNodes: []*schema.Unit{}, sidekicks: []*schema.Unit{u}}
 		} else {
-			wantedUnits[serviceName] = serviceGroup{serviceNodes: []*schema.Unit{u}, sidekicks: []*schema.Unit{}}
+			serviceGroups[serviceName] = serviceGroup{serviceNodes: []*schema.Unit{u}, sidekicks: []*schema.Unit{}}
 		}
 	}
-	return wantedUnits
+	return serviceGroups
 }
 
 func buildUnit(name string, uf *unit.UnitFile, desiredState string) *schema.Unit {
