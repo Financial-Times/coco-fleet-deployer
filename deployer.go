@@ -15,6 +15,7 @@ import (
 	"github.com/coreos/fleet/schema"
 	"github.com/coreos/fleet/unit"
 	"golang.org/x/net/proxy"
+	"github.com/kr/pretty"
 )
 
 type deployer struct {
@@ -70,6 +71,7 @@ func (d *deployer) deployAll() error {
 	if err != nil {
 		return err
 	}
+	log.Printf("DEBUG: Wanted Service groups \n: [%# v] \n", pretty.Formatter(wantedServiceGroups))
 
 	d.currentUnits, err = d.buildCurrentUnits()
 	if err != nil {
