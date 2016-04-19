@@ -434,19 +434,24 @@ func (d *deployer) launchUnit(u *schema.Unit) {
 }
 
 func updateServiceGroupMap(u *schema.Unit, serviceName string, isSidekick bool, serviceGroups map[string]serviceGroup) map[string]serviceGroup {
+	log.Printf("updateServiceGroupMap for unit [%s], servicename [%s], isSidekick[%s]\n",u.Name, serviceName, isSidekick)
+	log.Printf("SG before: [%# v]", serviceGroups)
 	if sg, ok := serviceGroups[serviceName]; ok {
+		log.Printf("Found SG")
 		if isSidekick {
 			sg.sidekicks = append(sg.sidekicks, u)
 		} else {
 			sg.serviceNodes = append(sg.serviceNodes, u)
 		}
 	} else {
+		log.Printf("Not Found SG")
 		if isSidekick {
 			serviceGroups[serviceName] = serviceGroup{serviceNodes: []*schema.Unit{}, sidekicks: []*schema.Unit{u}}
 		} else {
 			serviceGroups[serviceName] = serviceGroup{serviceNodes: []*schema.Unit{u}, sidekicks: []*schema.Unit{}}
 		}
 	}
+	log.Printf("SG after: [%# v]", serviceGroups)
 	return serviceGroups
 }
 
