@@ -51,6 +51,7 @@ func main() {
 	}
 	d, err := newDeployer()
 	if err != nil {
+		log.Printf("ERROR Error creating new deployer: [%s]", err.Error())
 		panic(err)
 	}
 

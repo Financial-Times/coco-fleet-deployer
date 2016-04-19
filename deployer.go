@@ -64,6 +64,8 @@ func newDeployer() (*deployer, error) {
 }
 
 func (d *deployer) deployAll() error {
+	log.Printf("DEBUG Starting deployAll().")
+	log.Printf("DEBUG ")
 	serviceGroups, err := d.buildWantedUnits()
 	if err != nil {
 		return err
@@ -78,15 +80,21 @@ func (d *deployer) deployAll() error {
 	toUpdate := d.identifyUpdatedServiceGroups(serviceGroups)
 	toDelete := d.identifyDeletedServiceGroups(serviceGroups)
 
+	log.Printf("DEBUG: Service groups to create: [%v]", toCreate)
+	log.Printf("DEBUG: Service groups to update: [%v]", toUpdate)
+	log.Printf("DEBUG: Service groups to delete: [%v]", toDelete)
+
 	d.createServiceGroups(toCreate)
 	d.updateServiceGroups(toUpdate)
 	d.deleteServiceGroups(toDelete)
 
 	d.launchAll(serviceGroups)
+	log.Printf("DEBUG Finished deployAll().")
 	return nil
 }
 
 func (d *deployer) identifyNewServiceGroups(serviceGroups map[string]serviceGroup) map[string]serviceGroup {
+	log.Printf("DEBUG Started identifyNewServiceGroups().")
 	newServiceGroups := make(map[string]serviceGroup)
 	for name, sg := range serviceGroups {
 		isNew, err := d.isNewUnit(sg.serviceNodes[0])
@@ -97,10 +105,12 @@ func (d *deployer) identifyNewServiceGroups(serviceGroups map[string]serviceGrou
 			newServiceGroups[name] = sg
 		}
 	}
+	log.Printf("DEBUG Finished identifyNewServiceGroups().")
 	return newServiceGroups
 }
 
 func (d *deployer) identifyUpdatedServiceGroups(serviceGroups map[string]serviceGroup) map[string]serviceGroup {
+	log.Printf("DEBUG Started identifyUpdatedServiceGroups().")
 	updatedServiceGroups := make(map[string]serviceGroup)
 	for name, sg := range serviceGroups {
 		isUpdated, err := d.isUpdatedUnit(sg.serviceNodes[0])
@@ -112,10 +122,12 @@ func (d *deployer) identifyUpdatedServiceGroups(serviceGroups map[string]service
 		}
 		//TODO should a sidekick-only update trigger a service restart too? Only for sequential deployments or generally?
 	}
+	log.Printf("DEBUG Finished identifyUpdatedServiceGroups().")
 	return updatedServiceGroups
 }
 
 func (d *deployer) identifyDeletedServiceGroups(serviceGroups map[string]serviceGroup) map[string]serviceGroup {
+	log.Printf("DEBUG Started identifyUpdatedServiceGroups().")
 	deletedServiceGroups := make(map[string]serviceGroup)
 	for name, u := range d.currentUnits {
 		if sg, ok := serviceGroups[getServiceName(u.Name)]; !ok {
@@ -125,10 +137,12 @@ func (d *deployer) identifyDeletedServiceGroups(serviceGroups map[string]service
 			}
 		}
 	}
+	log.Printf("DEBUG Finished identifyUpdatedServiceGroups().")
 	return deletedServiceGroups
 }
 
 func (d *deployer) createServiceGroups(serviceGroups map[string]serviceGroup) {
+	log.Printf("DEBUG Starting createServiceGroups().")
 	for _, sg := range serviceGroups {
 		for _, u := range sg.serviceNodes {
 			if err := d.fleetapi.CreateUnit(u); err != nil {
@@ -144,10 +158,12 @@ func (d *deployer) createServiceGroups(serviceGroups map[string]serviceGroup) {
 			}
 		}
 	}
+	log.Printf("DEBUG Finished createServiceGroups().")
 
 }
 
 func (d *deployer) updateServiceGroups(serviceGroups map[string]serviceGroup) {
+	log.Printf("DEBUG Starting updateServiceGroups().")
 	for _, sg := range serviceGroups {
 		if sg.isZDD {
 			d.performSequentialDeployment(sg)
@@ -161,9 +177,11 @@ func (d *deployer) updateServiceGroups(serviceGroups map[string]serviceGroup) {
 			d.updateUnit(u)
 		}
 	}
+	log.Printf("DEBUG Finish updateServiceGroups().")
 }
 
 func (d *deployer) deleteServiceGroups(serviceGroups map[string]serviceGroup) {
+	log.Printf("DEBUG Starting updateServiceGroups().")
 	for _, sg := range serviceGroups {
 		for _, u := range sg.serviceNodes {
 			if err := d.fleetapi.DestroyUnit(u.Name); err != nil {
@@ -179,9 +197,11 @@ func (d *deployer) deleteServiceGroups(serviceGroups map[string]serviceGroup) {
 			}
 		}
 	}
+	log.Printf("DEBUG Finish updateServiceGroups().")
 }
 
 func (d *deployer) buildWantedUnits() (map[string]serviceGroup, error) {
+	log.Printf("DEBUG Starting buildWantedUnits()")
 	servicesDefinition, err := d.serviceDefinitionClient.servicesDefinition()
 	if err != nil {
 		log.Printf("ERROR Cannot read services definition: [%v]. \nAborting run!", err)
@@ -190,6 +210,7 @@ func (d *deployer) buildWantedUnits() (map[string]serviceGroup, error) {
 
 	wantedUnits := make(map[string]serviceGroup)
 	for _, srv := range servicesDefinition.Services {
+		log.Printf("DEBUG Processing [%s].", srv.Name)
 		serviceFile, err := d.makeServiceFile(srv)
 		if err != nil {
 			return nil, err
@@ -205,10 +226,11 @@ func (d *deployer) buildWantedUnits() (map[string]serviceGroup, error) {
 		isSidekick := strings.Contains(srv.Name, "sidekick")
 
 		if srv.Count == 0 && !strings.Contains(srv.Name, "@") {
+			log.Printf("DEBUG [%s] non templated service.", serviceName)
 			u := buildUnit(srv.Name, uf, srv.DesiredState)
 			wantedUnits = updateWantedUnits(u, serviceName, isSidekick, wantedUnits)
-
 		} else if srv.Count > 0 && strings.Contains(srv.Name, "@") {
+			log.Printf("DEBUG [%s] templated service.", serviceName)
 			for i := 0; i < srv.Count; i++ {
 				nodeName := strings.Replace(srv.Name, "@", fmt.Sprintf("@%d", i+1), -1)
 				u := buildUnit(nodeName, uf, srv.DesiredState)
@@ -223,6 +245,7 @@ func (d *deployer) buildWantedUnits() (map[string]serviceGroup, error) {
 			log.Printf("WARNING skipping service: %s, incorrect service definition", srv.Name)
 		}
 	}
+	log.Printf("DEBUG Finish buildWantedUnits()")
 	return wantedUnits, nil
 }
 
@@ -286,6 +309,7 @@ func (d *deployer) performSequentialDeployment(sg serviceGroup) {
 }
 
 func (d *deployer) buildCurrentUnits() (map[string]*schema.Unit, error) {
+	log.Println("DEBUG Starting buildCurrentUnits()")
 	all, err := d.fleetapi.Units()
 	if err != nil {
 		return nil, err
@@ -295,22 +319,8 @@ func (d *deployer) buildCurrentUnits() (map[string]*schema.Unit, error) {
 	for _, u := range all {
 		units[u.Name] = u
 	}
+	log.Println("DEBUG Finished buildCurrentUnits()")
 	return units, nil
-}
-
-func (d *deployer) destroyUnwanted(wantedUnits, currentUnits map[string]*schema.Unit) error {
-	for _, u := range currentUnits {
-		if wantedUnits[u.Name] == nil {
-			//Do not destroy the deployer itself
-			if _, ok := destroyServiceBlacklist[u.Name]; !ok {
-				err := d.fleetapi.DestroyUnit(u.Name)
-				if err != nil {
-					return err
-				}
-			}
-		}
-	}
-	return nil
 }
 
 func (d *deployer) launchAll(serviceGroups map[string]serviceGroup) error {
