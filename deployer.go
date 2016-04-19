@@ -397,6 +397,9 @@ func getServiceName(unitName string) string {
 	if strings.Contains(unitName, "sidekick") {
 		return strings.Split(unitName, "-sidekick")[0]
 	}
+	if strings.Contains(unitName, "@"){
+		return strings.Split(unitName, "@.service")[0]
+	}
 	return strings.Split(unitName, ".service")[0]
 }
 
