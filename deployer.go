@@ -94,9 +94,20 @@ func (d *deployer) deployAll() error {
 	d.updateServiceGroups(toUpdate)
 	d.deleteServiceGroups(toDelete)
 
-	d.launchAll(wantedServiceGroups)
+	toLaunch := mergeMaps(toCreate, toUpdate)
+	d.launchAll(toLaunch)
 	log.Printf("DEBUG Finished deployAll().")
 	return nil
+}
+
+func mergeMaps(maps ...map[string]serviceGroup) map[string]serviceGroup {
+	merged := make(map[string]serviceGroup)
+	for sgMap := range maps {
+		for k, v := range sgMap {
+			merged[k] = v
+		}
+	}
+	return merged
 }
 
 func purgeProcessed(wanted map[string]serviceGroup, processed map[string]serviceGroup) {
@@ -450,7 +461,7 @@ func updateServiceGroupMap(u *schema.Unit, serviceName string, isSidekick bool, 
 	//log.Printf("updateServiceGroupMap for unit [%s], servicename [%s], isSidekick[%s]\n", u.Name, serviceName, isSidekick)
 	//log.Printf("SG before: [%# v]", serviceGroups)
 	if sg, ok := serviceGroups[serviceName]; ok {
-		log.Printf("Found SG")
+		//log.Printf("Found SG")
 		if isSidekick {
 			sg.sidekicks = append(sg.sidekicks, u)
 		} else {
