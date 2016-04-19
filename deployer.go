@@ -66,7 +66,6 @@ func newDeployer() (*deployer, error) {
 
 func (d *deployer) deployAll() error {
 	log.Printf("DEBUG Starting deployAll().")
-	log.Printf("DEBUG ")
 	wantedServiceGroups, err := d.buildWantedUnits()
 	if err != nil {
 		return err
@@ -165,16 +164,17 @@ func (d *deployer) createServiceGroups(serviceGroups map[string]serviceGroup) {
 				//TODO this handling ok
 				continue
 			}
+			log.Printf("DesiredState for [%s]: [%s]", u.Name, u.DesiredState)
 		}
 		for _, u := range sg.sidekicks {
 			if err := d.fleetapi.CreateUnit(u); err != nil {
 				log.Printf("WARNING Failed to create unit %s: %v [SKIPPING]", u.Name, err)
 				continue
 			}
+			log.Printf("DesiredState for [%s]: [%s]", u.Name, u.DesiredState)
 		}
 	}
 	log.Printf("DEBUG Finished createServiceGroups().")
-
 }
 
 func (d *deployer) updateServiceGroups(serviceGroups map[string]serviceGroup) {
@@ -435,6 +435,8 @@ func (d *deployer) updateUnit(u *schema.Unit) {
 func (d *deployer) launchUnit(u *schema.Unit) {
 	if u.DesiredState == "" {
 		u.DesiredState = "launched"
+	} else {
+		log.Printf("Special desiredState: [%s]", u.DesiredState)
 	}
 	if d.currentUnits[u.Name].DesiredState != u.DesiredState {
 		err := d.fleetapi.SetUnitTargetState(u.Name, u.DesiredState)
@@ -445,8 +447,8 @@ func (d *deployer) launchUnit(u *schema.Unit) {
 }
 
 func updateServiceGroupMap(u *schema.Unit, serviceName string, isSidekick bool, serviceGroups map[string]serviceGroup) map[string]serviceGroup {
-	log.Printf("updateServiceGroupMap for unit [%s], servicename [%s], isSidekick[%s]\n", u.Name, serviceName, isSidekick)
-	log.Printf("SG before: [%# v]", serviceGroups)
+	//log.Printf("updateServiceGroupMap for unit [%s], servicename [%s], isSidekick[%s]\n", u.Name, serviceName, isSidekick)
+	//log.Printf("SG before: [%# v]", serviceGroups)
 	if sg, ok := serviceGroups[serviceName]; ok {
 		log.Printf("Found SG")
 		if isSidekick {
@@ -456,14 +458,14 @@ func updateServiceGroupMap(u *schema.Unit, serviceName string, isSidekick bool, 
 		}
 		serviceGroups[serviceName] = sg
 	} else {
-		log.Printf("Not Found SG")
+		//log.Printf("Not Found SG")
 		if isSidekick {
 			serviceGroups[serviceName] = serviceGroup{serviceNodes: []*schema.Unit{}, sidekicks: []*schema.Unit{u}}
 		} else {
 			serviceGroups[serviceName] = serviceGroup{serviceNodes: []*schema.Unit{u}, sidekicks: []*schema.Unit{}}
 		}
 	}
-	log.Printf("SG after: [%# v]", serviceGroups)
+	//log.Printf("SG after: [%# v]", serviceGroups)
 	return serviceGroups
 }
 
