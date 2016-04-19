@@ -14,8 +14,8 @@ import (
 	"github.com/coreos/fleet/client"
 	"github.com/coreos/fleet/schema"
 	"github.com/coreos/fleet/unit"
-	"golang.org/x/net/proxy"
 	"github.com/kr/pretty"
+	"golang.org/x/net/proxy"
 )
 
 type deployer struct {
@@ -79,8 +79,13 @@ func (d *deployer) deployAll() error {
 	}
 
 	toCreate := d.identifyNewServiceGroups(wantedServiceGroups)
+	purgeProcessed(wantedServiceGroups, toCreate)
+
 	toUpdate := d.identifyUpdatedServiceGroups(wantedServiceGroups)
+	purgeProcessed(wantedServiceGroups, toUpdate)
+
 	toDelete := d.identifyDeletedServiceGroups(wantedServiceGroups)
+	purgeProcessed(wantedServiceGroups, toDelete)
 
 	log.Printf("DEBUG: Service groups to create: [%v]", toCreate)
 	log.Printf("DEBUG: Service groups to update: [%v]", toUpdate)
@@ -93,6 +98,12 @@ func (d *deployer) deployAll() error {
 	d.launchAll(wantedServiceGroups)
 	log.Printf("DEBUG Finished deployAll().")
 	return nil
+}
+
+func purgeProcessed(wanted map[string]serviceGroup, processed map[string]serviceGroup) {
+	for key, _ := range processed {
+		delete(wanted, key)
+	}
 }
 
 func (d *deployer) identifyNewServiceGroups(serviceGroups map[string]serviceGroup) map[string]serviceGroup {
@@ -434,7 +445,7 @@ func (d *deployer) launchUnit(u *schema.Unit) {
 }
 
 func updateServiceGroupMap(u *schema.Unit, serviceName string, isSidekick bool, serviceGroups map[string]serviceGroup) map[string]serviceGroup {
-	log.Printf("updateServiceGroupMap for unit [%s], servicename [%s], isSidekick[%s]\n",u.Name, serviceName, isSidekick)
+	log.Printf("updateServiceGroupMap for unit [%s], servicename [%s], isSidekick[%s]\n", u.Name, serviceName, isSidekick)
 	log.Printf("SG before: [%# v]", serviceGroups)
 	if sg, ok := serviceGroups[serviceName]; ok {
 		log.Printf("Found SG")
