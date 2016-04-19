@@ -72,6 +72,10 @@ func (d *deployer) deployAll() error {
 	}
 	log.Printf("DEBUG: Wanted Service groups \n: [%# v] \n", pretty.Formatter(wantedServiceGroups))
 
+	d.currentUnits, err = d.buildCurrentUnits()
+	if err != nil {
+		return err
+	}
 
 	toCreate := d.identifyNewServiceGroups(wantedServiceGroups)
 	purgeProcessed(wantedServiceGroups, toCreate)
@@ -79,11 +83,6 @@ func (d *deployer) deployAll() error {
 	toUpdate := d.identifyUpdatedServiceGroups(wantedServiceGroups)
 	purgeProcessed(wantedServiceGroups, toUpdate)
 
-	d.currentUnits, err = d.buildCurrentUnits()
-	if err != nil {
-		return err
-	}
-	
 	toDelete := d.identifyDeletedServiceGroups(wantedServiceGroups)
 	purgeProcessed(wantedServiceGroups, toDelete)
 
@@ -450,12 +449,21 @@ func (d *deployer) launchUnit(u *schema.Unit) {
 	} else {
 		log.Printf("Special desiredState: [%s]", u.DesiredState)
 	}
-	if d.currentUnits[u.Name].DesiredState != u.DesiredState {
+
+	if u, ok := d.currentUnits[u.Name]; ok {
+		if d.currentUnits[u.Name].DesiredState != u.DesiredState {
+			err := d.fleetapi.SetUnitTargetState(u.Name, u.DesiredState)
+			if err != nil {
+				//TODO log
+			}
+		}
+	} else {
 		err := d.fleetapi.SetUnitTargetState(u.Name, u.DesiredState)
 		if err != nil {
 			//TODO log
 		}
 	}
+
 }
 
 func updateServiceGroupMap(u *schema.Unit, serviceName string, isSidekick bool, serviceGroups map[string]serviceGroup) map[string]serviceGroup {
