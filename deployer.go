@@ -102,7 +102,7 @@ func (d *deployer) deployAll() error {
 
 func mergeMaps(maps ...map[string]serviceGroup) map[string]serviceGroup {
 	merged := make(map[string]serviceGroup)
-	for sgMap := range maps {
+	for _, sgMap := range maps {
 		for k, v := range sgMap {
 			merged[k] = v
 		}
