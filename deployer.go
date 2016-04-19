@@ -150,19 +150,22 @@ func (d *deployer) identifyUpdatedServiceGroups(serviceGroups map[string]service
 }
 
 func (d *deployer) identifyDeletedServiceGroups(wantedServiceGroups map[string]serviceGroup) map[string]serviceGroup {
-	log.Printf("DEBUG Started identifyUpdatedServiceGroups().")
+	log.Printf("DEBUG Started identifyDeletedServiceGroups().")
 	deletedServiceGroups := make(map[string]serviceGroup)
 	for _, u := range d.currentUnits {
+		log.Printf("Checking [%s]", u.Name)
 		serviceName := getServiceName(u.Name)
+		log.Printf("Service name [%s]", serviceName)
 		if _, ok := wantedServiceGroups[serviceName]; !ok {
 			//Do not destroy the deployer itself
 			if _, ok := destroyServiceBlacklist[u.Name]; !ok {
 				isSidekick := strings.Contains(u.Name, "sidekick")
+				log.Printf("Sentencing to death: [%s]", serviceName)
 				deletedServiceGroups = updateServiceGroupMap(u, serviceName, isSidekick, deletedServiceGroups)
 			}
 		}
 	}
-	log.Printf("DEBUG Finished identifyUpdatedServiceGroups().")
+	log.Printf("DEBUG Finished identifyDeletedServiceGroups().")
 	return deletedServiceGroups
 }
 
