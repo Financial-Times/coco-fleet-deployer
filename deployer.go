@@ -397,13 +397,16 @@ func renderedServiceFile(serviceTemplate []byte, context map[string]interface{})
 }
 
 func getServiceName(unitName string) string {
-	if strings.Contains(unitName, "sidekick") {
+	if strings.Contains(unitName, "sidekick") {	//sidekick
 		return strings.Split(unitName, "-sidekick")[0]
 	}
-	if strings.Contains(unitName, "@"){
+	if strings.Contains(unitName, "@.service"){	//templated without node number
 		return strings.Split(unitName, "@.service")[0]
 	}
-	return strings.Split(unitName, ".service")[0]
+	if strings.Contains(unitName, "@"){		//templated with node number
+		return strings.Split(unitName, "@")[0]
+	}
+	return strings.Split(unitName, ".service")[0]	//not templated
 }
 
 func (d *deployer) makeServiceFile(s service) (string, error) {
