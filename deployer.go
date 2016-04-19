@@ -450,8 +450,8 @@ func (d *deployer) launchUnit(u *schema.Unit) {
 		log.Printf("Special desiredState: [%s]", u.DesiredState)
 	}
 
-	if u, ok := d.currentUnits[u.Name]; ok {
-		if d.currentUnits[u.Name].DesiredState != u.DesiredState {
+	if currentUnit, ok := d.currentUnits[u.Name]; ok {
+		if currentUnit.DesiredState != u.DesiredState {
 			err := d.fleetapi.SetUnitTargetState(u.Name, u.DesiredState)
 			if err != nil {
 				//TODO log
