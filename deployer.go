@@ -81,7 +81,6 @@ func (d *deployer) deployAll() error {
 	purgeProcessed(wantedServiceGroups, toCreate)
 
 	toUpdate := d.identifyUpdatedServiceGroups(wantedServiceGroups)
-	purgeProcessed(wantedServiceGroups, toUpdate)
 
 	log.Printf("DEBUG: Service groups to create: [%v]", toCreate)
 	log.Printf("DEBUG: Service groups to update: [%v]", toUpdate)
@@ -350,6 +349,8 @@ func (d *deployer) buildCurrentUnits() (map[string]*schema.Unit, error) {
 }
 
 func (d *deployer) launchAll(serviceGroups map[string]serviceGroup) error {
+	log.Println("DEBUG: Starting launchAll()")
+	log.Printf("Launching sgs: [%v]", serviceGroups)
 	for _, sg := range serviceGroups {
 		if sg.isZDD { //they are launched separately
 			continue
@@ -361,6 +362,7 @@ func (d *deployer) launchAll(serviceGroups map[string]serviceGroup) error {
 			d.launchUnit(u)
 		}
 	}
+	log.Println("DEBUG: Finished launchAll()")
 	//TODO handle
 	return nil
 }
@@ -460,16 +462,15 @@ func (d *deployer) launchUnit(u *schema.Unit) {
 		if currentUnit.DesiredState != u.DesiredState {
 			err := d.fleetapi.SetUnitTargetState(u.Name, u.DesiredState)
 			if err != nil {
-				//TODO log
+				log.Printf("ERROR Could not set desired state [%s] for unit [%s]", u.DesiredState, u.Name)
 			}
 		}
 	} else {
 		err := d.fleetapi.SetUnitTargetState(u.Name, u.DesiredState)
 		if err != nil {
-			//TODO log
+			log.Printf("ERROR Could not set desired state [%s] for unit [%s]", u.DesiredState, u.Name)
 		}
 	}
-
 }
 
 func updateServiceGroupMap(u *schema.Unit, serviceName string, isSidekick bool, serviceGroups map[string]serviceGroup) map[string]serviceGroup {
