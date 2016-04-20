@@ -14,8 +14,8 @@ import (
 	"github.com/coreos/fleet/client"
 	"github.com/coreos/fleet/schema"
 	"github.com/coreos/fleet/unit"
-	"golang.org/x/net/proxy"
 	"github.com/kr/pretty"
+	"golang.org/x/net/proxy"
 )
 
 type deployer struct {
@@ -76,19 +76,34 @@ func (d *deployer) deployAll() error {
 	purgeProcessed(wantedServiceGroups, toCreate)
 
 	toUpdate := d.identifyUpdatedServiceGroups(wantedServiceGroups)
+	toUpdateSequentially, toUpdateNormally := sortServiceGroupsByUpdateType(toUpdate)
 
 	log.Printf("DEBUG: Service groups to create: [%v]", toCreate)
-	log.Printf("DEBUG: Service groups to update: [%v]", toUpdate)
+	log.Printf("DEBUG: Service groups to update normally: [%v]", toUpdateNormally)
+	log.Printf("DEBUG: Service groups to update sequentially: [%v]", toUpdateSequentially)
 	log.Printf("DEBUG: Service groups to delete: [%v]", toDelete)
 
 	d.createServiceGroups(toCreate)
-	d.updateServiceGroups(toUpdate)
+	d.updateServiceGroupsNormally(toUpdateNormally)
+	d.updateServiceGroupsSequentially(toUpdateSequentially)
 	d.deleteServiceGroups(toDelete)
 
-	toLaunch := mergeMaps(toCreate, toUpdate)
+	toLaunch := mergeMaps(toCreate, toUpdateNormally)
 	d.launchAll(toLaunch)
 	log.Printf("DEBUG Finished deployAll().")
 	return nil
+}
+
+func sortServiceGroupsByUpdateType(toUpdate map[string]serviceGroup) (map[string]serviceGroup, map[string]serviceGroup) {
+	var toUpdateSequentially, toUpdateNormally map[string]serviceGroup
+	for sgName, sg := range toUpdate {
+		if sg.isZDD {
+			toUpdateSequentially[sgName] = sg
+		} else {
+			toUpdateNormally[sgName] = sg
+		}
+	}
+	return toUpdateSequentially, toUpdateNormally
 }
 
 func mergeMaps(maps ...map[string]serviceGroup) map[string]serviceGroup {
@@ -193,15 +208,9 @@ func (d *deployer) createServiceGroups(serviceGroups map[string]serviceGroup) {
 	log.Printf("DEBUG Finished createServiceGroups().")
 }
 
-func (d *deployer) updateServiceGroups(serviceGroups map[string]serviceGroup) {
-	log.Printf("DEBUG Starting updateServiceGroups().")
-	for sgName, sg := range serviceGroups {
-		log.Printf("DEBUG ZDD for [%s] is [%v].", sgName, sg.isZDD)
-		if sg.isZDD {
-			d.performSequentialDeployment(sg)
-			continue
-		}
-
+func (d *deployer) updateServiceGroupsNormally(serviceGroups map[string]serviceGroup) {
+	log.Printf("DEBUG Starting updateServiceGroupsNormally().")
+	for _, sg := range serviceGroups {
 		for _, u := range sg.serviceNodes {
 			d.updateUnit(u)
 		}
@@ -209,7 +218,15 @@ func (d *deployer) updateServiceGroups(serviceGroups map[string]serviceGroup) {
 			d.updateUnit(u)
 		}
 	}
-	log.Printf("DEBUG Finish updateServiceGroups().")
+	log.Printf("DEBUG Finish updateServiceGroupsNormally().")
+}
+
+func (d *deployer) updateServiceGroupsSequentially(serviceGroups map[string]serviceGroup) {
+	log.Printf("DEBUG Starting updateServiceGroupsSequentially().")
+	for _, sg := range serviceGroups {
+		d.performSequentialDeployment(sg)
+	}
+	log.Printf("DEBUG Finish updateServiceGroupsSequentially().")
 }
 
 func (d *deployer) deleteServiceGroups(serviceGroups map[string]serviceGroup) {
