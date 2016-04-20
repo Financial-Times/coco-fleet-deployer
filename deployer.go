@@ -452,6 +452,7 @@ func (d *deployer) updateUnit(u *schema.Unit) {
 }
 
 func (d *deployer) launchUnit(u *schema.Unit) {
+	log.Printf("Launching unit [%s]", u.Name)
 	if u.DesiredState == "" {
 		u.DesiredState = "launched"
 	} else {
@@ -459,18 +460,25 @@ func (d *deployer) launchUnit(u *schema.Unit) {
 	}
 
 	if currentUnit, ok := d.currentUnits[u.Name]; ok {
+		log.Printf("Found in the currentUnits map")
 		if currentUnit.DesiredState != u.DesiredState {
+			log.Printf("current desired state doesn't match unit desired state")
 			err := d.fleetapi.SetUnitTargetState(u.Name, u.DesiredState)
 			if err != nil {
 				log.Printf("ERROR Could not set desired state [%s] for unit [%s]", u.DesiredState, u.Name)
 			}
+		} else {
+			log.Printf("current desired state DOES match unit desired state")
 		}
+
 	} else {
+		log.Printf("Not found in the currentUnits map")
 		err := d.fleetapi.SetUnitTargetState(u.Name, u.DesiredState)
 		if err != nil {
 			log.Printf("ERROR Could not set desired state [%s] for unit [%s]", u.DesiredState, u.Name)
 		}
 	}
+	log.Printf("Launching unit [%s] DONE", u.Name)
 }
 
 func updateServiceGroupMap(u *schema.Unit, serviceName string, isSidekick bool, serviceGroups map[string]serviceGroup) map[string]serviceGroup {
