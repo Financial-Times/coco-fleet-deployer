@@ -20,7 +20,6 @@ import (
 type deployer struct {
 	fleetapi                client.API
 	serviceDefinitionClient serviceDefinitionClient
-	currentUnits            map[string]*schema.Unit
 }
 
 var whitespaceMatcher, _ = regexp.Compile("\\s+")
@@ -69,11 +68,6 @@ func (d *deployer) deployAll() error {
 		return err
 	}
 	//log.Printf("DEBUG: Wanted Service groups \n: [%# v] \n", pretty.Formatter(wantedServiceGroups))
-
-	d.currentUnits, err = d.buildCurrentUnits()
-	if err != nil {
-		return err
-	}
 
 	toDelete := d.identifyDeletedServiceGroups(wantedServiceGroups)
 
@@ -148,7 +142,13 @@ func (d *deployer) identifyUpdatedServiceGroups(serviceGroups map[string]service
 func (d *deployer) identifyDeletedServiceGroups(wantedServiceGroups map[string]serviceGroup) map[string]serviceGroup {
 	log.Printf("DEBUG Started identifyDeletedServiceGroups().")
 	deletedServiceGroups := make(map[string]serviceGroup)
-	for _, u := range d.currentUnits {
+	
+	currentUnits, err := d.buildCurrentUnits()
+	if err != nil {
+		//TODO log
+		return nil
+	}
+	for _, u := range currentUnits {
 		//log.Printf("Checking [%s]", u.Name)
 		serviceName := getServiceName(u.Name)
 		//log.Printf("Service name [%s]", serviceName)
@@ -351,15 +351,19 @@ func (d *deployer) buildCurrentUnits() (map[string]*schema.Unit, error) {
 func (d *deployer) launchAll(serviceGroups map[string]serviceGroup) error {
 	log.Println("DEBUG: Starting launchAll()")
 	log.Printf("Launching sgs: [%v]", serviceGroups)
+	currentUnits, err := d.buildCurrentUnits()
+	if err != nil {
+		return err
+	}
 	for _, sg := range serviceGroups {
 		if sg.isZDD { //they are launched separately
 			continue
 		}
 		for _, u := range sg.serviceNodes {
-			d.launchUnit(u)
+			d.launchUnit(u, currentUnits)
 		}
 		for _, u := range sg.sidekicks {
-			d.launchUnit(u)
+			d.launchUnit(u, currentUnits)
 		}
 	}
 	log.Println("DEBUG: Finished launchAll()")
@@ -451,7 +455,7 @@ func (d *deployer) updateUnit(u *schema.Unit) {
 	u.DesiredState = ""
 }
 
-func (d *deployer) launchUnit(u *schema.Unit) {
+func (d *deployer) launchUnit(u *schema.Unit, currentUnits map[string]*schema.Unit) {
 	log.Printf("Launching unit [%s]", u.Name)
 	if u.DesiredState == "" {
 		u.DesiredState = "launched"
@@ -459,7 +463,7 @@ func (d *deployer) launchUnit(u *schema.Unit) {
 		log.Printf("Special desiredState: [%s]", u.DesiredState)
 	}
 
-	if currentUnit, ok := d.currentUnits[u.Name]; ok {
+	if currentUnit, ok := currentUnits[u.Name]; ok {
 		log.Printf("Found in the currentUnits map")
 		if currentUnit.DesiredState != u.DesiredState {
 			log.Printf("current desired state doesn't match unit desired state")
