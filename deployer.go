@@ -377,19 +377,21 @@ func (d *deployer) buildCurrentUnits() (map[string]*schema.Unit, error) {
 
 func (d *deployer) launchAll(serviceGroups map[string]serviceGroup) error {
 	log.Println("DEBUG: Starting launchAll()")
-	log.Printf("Launching sgs: [%v]", serviceGroups)
+	log.Printf("Launching sgs: [%# v]", pretty.Formatter(serviceGroups))
 	currentUnits, err := d.buildCurrentUnits()
 	if err != nil {
+		log.Printf("Error building current Units: [%s]", err.Error())
 		return err
 	}
-	for _, sg := range serviceGroups {
-		if sg.isZDD { //they are launched separately
-			continue
-		}
+	log.Println("Just before iterating over sgs")
+	for sgName, sg := range serviceGroups {
+		log.Printf("Iterating over sg [%s]", sgName)
 		for _, u := range sg.serviceNodes {
+			log.Println("Iterating over services")
 			d.launchUnit(u, currentUnits)
 		}
 		for _, u := range sg.sidekicks {
+			log.Println("Iterating over sidekicks")
 			d.launchUnit(u, currentUnits)
 		}
 	}
