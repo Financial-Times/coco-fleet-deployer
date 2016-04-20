@@ -132,6 +132,9 @@ func (d *deployer) identifyUpdatedServiceGroups(serviceGroups map[string]service
 		}
 		if !isUpdated && (len(sg.sidekicks) > 0) {
 			isUpdated, err = d.isUpdatedUnit(sg.sidekicks[0])
+			if err != nil {
+				log.Printf("WARNING Failed to determine if it's a new unit %s: %v [SKIPPING]", sg.serviceNodes[0].Name, err)
+			}
 		}
 		if isUpdated {
 			updatedServiceGroups[name] = sg
@@ -443,6 +446,7 @@ func (d *deployer) makeUnitFile(serviceFile string) (*unit.UnitFile, error) {
 }
 
 func (d *deployer) updateUnit(u *schema.Unit) {
+	originalDesiredState := u.DesiredState
 	u.DesiredState = "inactive"
 	if err := d.fleetapi.DestroyUnit(u.Name); err != nil {
 		log.Printf("WARNING Failed to destroy unit %s: %v [SKIPPING]", u.Name, err)
@@ -454,7 +458,7 @@ func (d *deployer) updateUnit(u *schema.Unit) {
 		log.Printf("WARNING Failed to create unit %s: %v [SKIPPING]", u.Name, err)
 		return
 	}
-	u.DesiredState = ""
+	u.DesiredState = originalDesiredState
 }
 
 func (d *deployer) launchUnit(u *schema.Unit, currentUnits map[string]*schema.Unit) {
