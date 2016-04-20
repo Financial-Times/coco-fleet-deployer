@@ -14,7 +14,6 @@ import (
 	"github.com/coreos/fleet/client"
 	"github.com/coreos/fleet/schema"
 	"github.com/coreos/fleet/unit"
-	"github.com/kr/pretty"
 	"golang.org/x/net/proxy"
 )
 
@@ -48,7 +47,6 @@ func newDeployer() (*deployer, error) {
 			Dial:                dialer.Dial,
 			TLSHandshakeTimeout: 10 * time.Second,
 		}
-
 	}
 
 	fleetHTTPAPIClient, err := client.NewHTTPClient(httpClient, *u)
@@ -70,21 +68,20 @@ func (d *deployer) deployAll() error {
 	if err != nil {
 		return err
 	}
-	log.Printf("DEBUG: Wanted Service groups \n: [%# v] \n", pretty.Formatter(wantedServiceGroups))
+	//log.Printf("DEBUG: Wanted Service groups \n: [%# v] \n", pretty.Formatter(wantedServiceGroups))
 
 	d.currentUnits, err = d.buildCurrentUnits()
 	if err != nil {
 		return err
 	}
 
+	toDelete := d.identifyDeletedServiceGroups(wantedServiceGroups)
+
 	toCreate := d.identifyNewServiceGroups(wantedServiceGroups)
 	purgeProcessed(wantedServiceGroups, toCreate)
 
 	toUpdate := d.identifyUpdatedServiceGroups(wantedServiceGroups)
 	purgeProcessed(wantedServiceGroups, toUpdate)
-
-	toDelete := d.identifyDeletedServiceGroups(wantedServiceGroups)
-	purgeProcessed(wantedServiceGroups, toDelete)
 
 	log.Printf("DEBUG: Service groups to create: [%v]", toCreate)
 	log.Printf("DEBUG: Service groups to update: [%v]", toUpdate)
@@ -153,14 +150,14 @@ func (d *deployer) identifyDeletedServiceGroups(wantedServiceGroups map[string]s
 	log.Printf("DEBUG Started identifyDeletedServiceGroups().")
 	deletedServiceGroups := make(map[string]serviceGroup)
 	for _, u := range d.currentUnits {
-		log.Printf("Checking [%s]", u.Name)
+		//log.Printf("Checking [%s]", u.Name)
 		serviceName := getServiceName(u.Name)
-		log.Printf("Service name [%s]", serviceName)
+		//log.Printf("Service name [%s]", serviceName)
 		if _, ok := wantedServiceGroups[serviceName]; !ok {
 			//Do not destroy the deployer itself
 			if _, ok := destroyServiceBlacklist[u.Name]; !ok {
 				isSidekick := strings.Contains(u.Name, "sidekick")
-				log.Printf("Sentencing to death: [%s]", serviceName)
+				//log.Printf("Sentencing to death: [%s]", serviceName)
 				deletedServiceGroups = updateServiceGroupMap(u, serviceName, isSidekick, deletedServiceGroups)
 			}
 		}
@@ -178,14 +175,14 @@ func (d *deployer) createServiceGroups(serviceGroups map[string]serviceGroup) {
 				//TODO this handling ok
 				continue
 			}
-			log.Printf("DesiredState for [%s]: [%s]", u.Name, u.DesiredState)
+			//log.Printf("DesiredState for [%s]: [%s]", u.Name, u.DesiredState)
 		}
 		for _, u := range sg.sidekicks {
 			if err := d.fleetapi.CreateUnit(u); err != nil {
 				log.Printf("WARNING Failed to create unit %s: %v [SKIPPING]", u.Name, err)
 				continue
 			}
-			log.Printf("DesiredState for [%s]: [%s]", u.Name, u.DesiredState)
+			//log.Printf("DesiredState for [%s]: [%s]", u.Name, u.DesiredState)
 		}
 	}
 	log.Printf("DEBUG Finished createServiceGroups().")
@@ -255,11 +252,11 @@ func (d *deployer) buildWantedUnits() (map[string]serviceGroup, error) {
 		isSidekick := strings.Contains(srv.Name, "sidekick")
 
 		if srv.Count == 0 && !strings.Contains(srv.Name, "@") {
-			log.Printf("DEBUG [%s] non templated service.", serviceName)
+			//log.Printf("DEBUG [%s] non templated service.", serviceName)
 			u := buildUnit(srv.Name, uf, srv.DesiredState)
 			wantedUnits = updateServiceGroupMap(u, serviceName, isSidekick, wantedUnits)
 		} else if srv.Count > 0 && strings.Contains(srv.Name, "@") {
-			log.Printf("DEBUG [%s] templated service.", serviceName)
+			//log.Printf("DEBUG [%s] templated service.", serviceName)
 			for i := 0; i < srv.Count; i++ {
 				nodeName := strings.Replace(srv.Name, "@", fmt.Sprintf("@%d", i+1), -1)
 				u := buildUnit(nodeName, uf, srv.DesiredState)
@@ -338,7 +335,7 @@ func (d *deployer) performSequentialDeployment(sg serviceGroup) {
 }
 
 func (d *deployer) buildCurrentUnits() (map[string]*schema.Unit, error) {
-	log.Println("DEBUG Starting buildCurrentUnits()")
+	//log.Println("DEBUG Starting buildCurrentUnits()")
 	all, err := d.fleetapi.Units()
 	if err != nil {
 		return nil, err
@@ -348,7 +345,7 @@ func (d *deployer) buildCurrentUnits() (map[string]*schema.Unit, error) {
 	for _, u := range all {
 		units[u.Name] = u
 	}
-	log.Println("DEBUG Finished buildCurrentUnits()")
+	//log.Println("DEBUG Finished buildCurrentUnits()")
 	return units, nil
 }
 
@@ -397,16 +394,16 @@ func renderedServiceFile(serviceTemplate []byte, context map[string]interface{})
 }
 
 func getServiceName(unitName string) string {
-	if strings.Contains(unitName, "sidekick") {	//sidekick
+	if strings.Contains(unitName, "sidekick") { //sidekick
 		return strings.Split(unitName, "-sidekick")[0]
 	}
-	if strings.Contains(unitName, "@.service"){	//templated without node number
+	if strings.Contains(unitName, "@.service") { //templated without node number
 		return strings.Split(unitName, "@.service")[0]
 	}
-	if strings.Contains(unitName, "@"){		//templated with node number
+	if strings.Contains(unitName, "@") { //templated with node number
 		return strings.Split(unitName, "@")[0]
 	}
-	return strings.Split(unitName, ".service")[0]	//not templated
+	return strings.Split(unitName, ".service")[0] //not templated
 }
 
 func (d *deployer) makeServiceFile(s service) (string, error) {
