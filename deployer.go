@@ -15,6 +15,7 @@ import (
 	"github.com/coreos/fleet/schema"
 	"github.com/coreos/fleet/unit"
 	"golang.org/x/net/proxy"
+	"github.com/kr/pretty"
 )
 
 type deployer struct {
@@ -67,7 +68,7 @@ func (d *deployer) deployAll() error {
 	if err != nil {
 		return err
 	}
-	//log.Printf("DEBUG: Wanted Service groups \n: [%# v] \n", pretty.Formatter(wantedServiceGroups))
+	log.Printf("DEBUG: Wanted Service groups \n: [%# v] \n", pretty.Formatter(wantedServiceGroups))
 
 	toDelete := d.identifyDeletedServiceGroups(wantedServiceGroups)
 
@@ -194,7 +195,8 @@ func (d *deployer) createServiceGroups(serviceGroups map[string]serviceGroup) {
 
 func (d *deployer) updateServiceGroups(serviceGroups map[string]serviceGroup) {
 	log.Printf("DEBUG Starting updateServiceGroups().")
-	for _, sg := range serviceGroups {
+	for sgName, sg := range serviceGroups {
+		log.Printf("DEBUG ZDD for [%s] is [%v].", sgName, sg.isZDD)
 		if sg.isZDD {
 			d.performSequentialDeployment(sg)
 			continue
@@ -269,6 +271,7 @@ func (d *deployer) buildWantedUnits() (map[string]serviceGroup, error) {
 				if srv.SequentialDeployment {
 					sg, _ := wantedUnits[serviceName]
 					sg.isZDD = true
+					wantedUnits[serviceName] = sg
 				}
 			}
 		} else {
@@ -288,6 +291,7 @@ func (d *deployer) isNewUnit(u *schema.Unit) (bool, error) {
 }
 
 func (d *deployer) performSequentialDeployment(sg serviceGroup) {
+	log.Println("Starting performSequentialDeployment()")
 	for i, u := range sg.serviceNodes {
 		d.updateUnit(u)
 		if err := d.fleetapi.SetUnitTargetState(u.Name, "launched"); err != nil {
@@ -336,6 +340,7 @@ func (d *deployer) performSequentialDeployment(sg serviceGroup) {
 			break
 		}
 	}
+	log.Println("Finished performSequentialDeployment()")
 }
 
 func (d *deployer) buildCurrentUnits() (map[string]*schema.Unit, error) {
