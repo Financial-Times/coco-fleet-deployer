@@ -95,7 +95,8 @@ func (d *deployer) deployAll() error {
 }
 
 func sortServiceGroupsByUpdateType(toUpdate map[string]serviceGroup) (map[string]serviceGroup, map[string]serviceGroup) {
-	var toUpdateSequentially, toUpdateNormally map[string]serviceGroup
+	toUpdateSequentially := make(map[string]serviceGroup)
+	toUpdateNormally := make(map[string]serviceGroup)
 	for sgName, sg := range toUpdate {
 		if sg.isZDD {
 			toUpdateSequentially[sgName] = sg
