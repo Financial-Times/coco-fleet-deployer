@@ -316,7 +316,7 @@ func (d *deployer) performSequentialDeployment(sg serviceGroup) {
 			log.Printf("WARNING Failed to set target state for unit %s: %v [SKIPPING]", u.Name, err)
 			continue
 		}
-		if i == len(sg.serviceNodes) { //this is the last node, we're done
+		if (i+1) == len(sg.serviceNodes) { //this is the last node, we're done
 			break
 		}
 
