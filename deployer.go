@@ -75,36 +75,28 @@ func (d *deployer) deployAll() error {
 	toCreate := d.identifyNewServiceGroups(wantedServiceGroups)
 	purgeProcessed(wantedServiceGroups, toCreate)
 
-	toUpdate := d.identifyUpdatedServiceGroups(wantedServiceGroups)
-	toUpdateSequentially, toUpdateNormally := sortServiceGroupsByUpdateType(toUpdate)
+	toUpdatedRegularSGs, toUpdateSKRegularSGs, toUpdateSequentially, toUpdateSKSequentially := d.identifyUpdatedServiceGroups(wantedServiceGroups)
 
 	log.Printf("DEBUG: Service groups to create: [%v]", toCreate)
-	log.Printf("DEBUG: Service groups to update normally: [%v]", toUpdateNormally)
+	log.Printf("DEBUG: Service groups to update normally: [%v]", toUpdatedRegularSGs)
 	log.Printf("DEBUG: Service groups to update sequentially: [%v]", toUpdateSequentially)
+	log.Printf("DEBUG: Service groups to update SK only: [%v]", toUpdateSKRegularSGs)
+	log.Printf("DEBUG: Service groups to update SK sequentially: [%v]", toUpdateSKSequentially)
 	log.Printf("DEBUG: Service groups to delete: [%v]", toDelete)
 
 	d.createServiceGroups(toCreate)
-	d.updateServiceGroupsNormally(toUpdateNormally)
+	d.updateServiceGroupsNormally(toUpdatedRegularSGs)
 	d.updateServiceGroupsSequentially(toUpdateSequentially)
+
+	d.updateServiceGroupsSKsOnly(toUpdateSKRegularSGs)
+	d.updateServiceGroupsSKsSequentially(toUpdateSKSequentially)
+
 	d.deleteServiceGroups(toDelete)
 
-	toLaunch := mergeMaps(toCreate, toUpdateNormally)
+	toLaunch := mergeMaps(toCreate, toUpdatedRegularSGs, toUpdateSKRegularSGs)
 	d.launchAll(toLaunch)
 	log.Printf("DEBUG Finished deployAll().")
 	return nil
-}
-
-func sortServiceGroupsByUpdateType(toUpdate map[string]serviceGroup) (map[string]serviceGroup, map[string]serviceGroup) {
-	toUpdateSequentially := make(map[string]serviceGroup)
-	toUpdateNormally := make(map[string]serviceGroup)
-	for sgName, sg := range toUpdate {
-		if sg.isZDD {
-			toUpdateSequentially[sgName] = sg
-		} else {
-			toUpdateNormally[sgName] = sg
-		}
-	}
-	return toUpdateSequentially, toUpdateNormally
 }
 
 func mergeMaps(maps ...map[string]serviceGroup) map[string]serviceGroup {
@@ -139,26 +131,45 @@ func (d *deployer) identifyNewServiceGroups(serviceGroups map[string]serviceGrou
 	return newServiceGroups
 }
 
-func (d *deployer) identifyUpdatedServiceGroups(serviceGroups map[string]serviceGroup) map[string]serviceGroup {
+func (d *deployer) identifyUpdatedServiceGroups(serviceGroups map[string]serviceGroup) (map[string]serviceGroup, map[string]serviceGroup, map[string]serviceGroup, map[string]serviceGroup) {
 	log.Printf("DEBUG Started identifyUpdatedServiceGroups().")
-	updatedServiceGroups := make(map[string]serviceGroup)
+	updatedRegularSGs := make(map[string]serviceGroup)
+	skUpdatedRegularSGs := make(map[string]serviceGroup)
+
+	updatedSequentialSGs := make(map[string]serviceGroup)
+	skUpdatedSequentialSGs := make(map[string]serviceGroup)
+
 	for name, sg := range serviceGroups {
 		isUpdated, err := d.isUpdatedUnit(sg.serviceNodes[0])
 		if err != nil {
-			log.Printf("WARNING Failed to determine if it's a new unit %s: %v [SKIPPING]", sg.serviceNodes[0].Name, err)
+			log.Printf("WARNING Failed to determine if it's an updated unit %s: %v [SKIPPING]", sg.serviceNodes[0].Name, err)
 		}
-		if !isUpdated && (len(sg.sidekicks) > 0) {
+		if isUpdated {
+			if sg.isZDD {
+				updatedSequentialSGs[name] = sg
+			} else {
+				updatedRegularSGs[name] = sg
+			}
+			continue
+		}
+
+		if len(sg.sidekicks) > 0 {
 			isUpdated, err = d.isUpdatedUnit(sg.sidekicks[0])
 			if err != nil {
-				log.Printf("WARNING Failed to determine if it's a new unit %s: %v [SKIPPING]", sg.serviceNodes[0].Name, err)
+				log.Printf("WARNING Failed to determine if it's an updated unit %s: %v [SKIPPING]", sg.serviceNodes[0].Name, err)
 			}
 		}
 		if isUpdated {
-			updatedServiceGroups[name] = sg
+			if sg.isZDD {
+				skUpdatedSequentialSGs[name] = sg
+			} else {
+				skUpdatedRegularSGs[name] = sg
+			}
+			continue
 		}
 	}
 	log.Printf("DEBUG Finished identifyUpdatedServiceGroups().")
-	return updatedServiceGroups
+	return updatedRegularSGs, skUpdatedRegularSGs, updatedSequentialSGs, skUpdatedSequentialSGs
 }
 
 func (d *deployer) identifyDeletedServiceGroups(wantedServiceGroups map[string]serviceGroup) map[string]serviceGroup {
@@ -209,6 +220,16 @@ func (d *deployer) createServiceGroups(serviceGroups map[string]serviceGroup) {
 	log.Printf("DEBUG Finished createServiceGroups().")
 }
 
+func (d *deployer) updateServiceGroupsSKsOnly(serviceGroups map[string]serviceGroup) {
+	log.Printf("DEBUG Starting updateServiceGroupsSKsOnly().")
+	for _, sg := range serviceGroups {
+		for _, u := range sg.sidekicks {
+			d.updateUnit(u)
+		}
+	}
+	log.Printf("DEBUG Finish updateServiceGroupsSKsOnly().")
+}
+
 func (d *deployer) updateServiceGroupsNormally(serviceGroups map[string]serviceGroup) {
 	log.Printf("DEBUG Starting updateServiceGroupsNormally().")
 	for _, sg := range serviceGroups {
@@ -228,6 +249,14 @@ func (d *deployer) updateServiceGroupsSequentially(serviceGroups map[string]serv
 		d.performSequentialDeployment(sg)
 	}
 	log.Printf("DEBUG Finish updateServiceGroupsSequentially().")
+}
+
+func (d *deployer) updateServiceGroupsSKsSequentially(serviceGroups map[string]serviceGroup) {
+	log.Printf("DEBUG Starting updateServiceGroupsSKsSequentially().")
+	for _, sg := range serviceGroups {
+		d.performSequentialDeploymentSK(sg)
+	}
+	log.Printf("DEBUG Finish updateServiceGroupsSKsSequentially().")
 }
 
 func (d *deployer) deleteServiceGroups(serviceGroups map[string]serviceGroup) {
@@ -308,7 +337,58 @@ func (d *deployer) isNewUnit(u *schema.Unit) (bool, error) {
 	return currentUnit == nil, nil
 }
 
+func (d *deployer) performSequentialDeploymentSK(sg serviceGroup) {
+	//update sidekicks first
+	log.Println("Starting performSequentialDeploymentSK()")
+	for i, u := range sg.sidekicks {
+		d.updateUnit(u)
+		if err := d.fleetapi.SetUnitTargetState(u.Name, "launched"); err != nil {
+			log.Printf("WARNING Failed to set target state for unit %s: %v [SKIPPING]", u.Name, err)
+			continue
+		}
+		if (i + 1) == len(sg.sidekicks) { //this is the last node, we're done
+			break
+		}
+
+		var unitToWaitOn string
+		unitToWaitOn = u.Name
+
+		// every 30 seconds, check if the unit to wait on is up - for a maximum of 5 minutes
+		timeoutChan := make(chan bool)
+		go func() {
+			<-time.After(time.Duration(5) * time.Minute)
+			close(timeoutChan)
+		}()
+
+		tickerChan := time.NewTicker(time.Duration(30) * time.Second)
+		for {
+			select {
+			case <-tickerChan.C:
+				unitStatus, err := d.fleetapi.Unit(unitToWaitOn)
+				if err != nil {
+					log.Printf("WARNING Failed to get unit %s: %v [SKIPPING]", u.Name, err)
+					continue
+				}
+
+				log.Printf("INFO UnitToWaitOn status: [%v]\n", unitStatus.CurrentState)
+				if unitStatus.CurrentState == "launched" {
+					tickerChan.Stop()
+					break
+				}
+				continue
+			case <-timeoutChan:
+				tickerChan.Stop()
+				log.Printf("WARN Service [%v] didn't start up in time", u.Name)
+				break
+			}
+			break
+		}
+	}
+	log.Println("Finished performSequentialDeploymentSK()")
+}
+
 func (d *deployer) performSequentialDeployment(sg serviceGroup) {
+	//update sidekicks first
 	log.Println("Starting performSequentialDeployment()")
 	for i, u := range sg.serviceNodes {
 		d.updateUnit(u)
@@ -316,7 +396,7 @@ func (d *deployer) performSequentialDeployment(sg serviceGroup) {
 			log.Printf("WARNING Failed to set target state for unit %s: %v [SKIPPING]", u.Name, err)
 			continue
 		}
-		if (i+1) == len(sg.serviceNodes) { //this is the last node, we're done
+		if (i + 1) == len(sg.serviceNodes) { //this is the last node, we're done
 			break
 		}
 
