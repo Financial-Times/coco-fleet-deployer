@@ -68,7 +68,7 @@ func (d *deployer) deployAll() error {
 	if err != nil {
 		return err
 	}
-	log.Printf("DEBUG: Wanted Service groups \n: [%# v] \n", pretty.Formatter(wantedServiceGroups))
+	//log.Printf("DEBUG: Wanted Service groups \n: [%# v] \n", pretty.Formatter(wantedServiceGroups))
 
 	toDelete := d.identifyDeletedServiceGroups(wantedServiceGroups)
 
