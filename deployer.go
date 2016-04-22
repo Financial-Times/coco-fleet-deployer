@@ -395,6 +395,9 @@ func (d *deployer) performSequentialDeployment(sg serviceGroup) {
 			for _, sk := range sg.sidekicks {
 				if sk.Name == skName {
 					d.updateUnit(sk)
+					if err := d.fleetapi.SetUnitTargetState(sk.Name, "launched"); err != nil {
+						log.Printf("WARNING Failed to set target state for unit %s: %v [SKIPPING]", u.Name, err)
+					}
 					break
 				}
 			}
