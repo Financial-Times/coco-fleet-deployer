@@ -338,7 +338,6 @@ func (d *deployer) isNewUnit(u *schema.Unit) (bool, error) {
 }
 
 func (d *deployer) performSequentialDeploymentSK(sg serviceGroup) {
-	//update sidekicks first
 	log.Println("Starting performSequentialDeploymentSK()")
 	for i, u := range sg.sidekicks {
 		d.updateUnit(u)
@@ -391,6 +390,15 @@ func (d *deployer) performSequentialDeployment(sg serviceGroup) {
 	//update sidekicks first
 	log.Println("Starting performSequentialDeployment()")
 	for i, u := range sg.serviceNodes {
+		if len(sg.sidekicks) > 0 {
+			skName := strings.Replace(u.Name, "@", "-sidekick@", 1)
+			for _, sk := range sg.sidekicks {
+				if sk.Name == skName {
+					d.updateUnit(sk)
+					break
+				}
+			}
+		}
 		d.updateUnit(u)
 		if err := d.fleetapi.SetUnitTargetState(u.Name, "launched"); err != nil {
 			log.Printf("WARNING Failed to set target state for unit %s: %v [SKIPPING]", u.Name, err)
