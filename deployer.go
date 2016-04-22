@@ -24,6 +24,8 @@ type deployer struct {
 
 const launchedState = "launched"
 const inactiveState = "inactive"
+const launchTimeout = time.Duration(5) * time.Minute
+const stateCheckInterval = time.Duration(30) * time.Second
 
 var whitespaceMatcher, _ = regexp.Compile("\\s+")
 
@@ -266,66 +268,20 @@ func (d *deployer) performSequentialDeploymentSK(sg serviceGroup) {
 	for i, u := range sg.sidekicks {
 		d.updateUnit(u)
 		if err := d.fleetapi.SetUnitTargetState(u.Name, "launched"); err != nil {
-			log.Printf("WARNING Failed to set target state for unit %s: %v [SKIPPING]", u.Name, err)
 			continue
 		}
 		if (i + 1) == len(sg.sidekicks) { //this is the last node, we're done
 			break
 		}
-
-		var unitToWaitOn string
-		unitToWaitOn = u.Name
-
-		// every 30 seconds, check if the unit to wait on is up - for a maximum of 5 minutes
-		timeoutChan := make(chan bool)
-		go func() {
-			<-time.After(time.Duration(5) * time.Minute)
-			close(timeoutChan)
-		}()
-
-		tickerChan := time.NewTicker(time.Duration(30) * time.Second)
-		for {
-			select {
-			case <-tickerChan.C:
-				unitStatus, err := d.fleetapi.Unit(unitToWaitOn)
-				if err != nil {
-					log.Printf("WARNING Failed to get unit %s: %v [SKIPPING]", u.Name, err)
-					continue
-				}
-
-				log.Printf("INFO UnitToWaitOn status: [%v]\n", unitStatus.CurrentState)
-				if unitStatus.CurrentState == launchedState {
-					tickerChan.Stop()
-					break
-				}
-				continue
-			case <-timeoutChan:
-				tickerChan.Stop()
-				log.Printf("WARN Service [%v] didn't start up in time", u.Name)
-				break
-			}
-			break
-		}
+		d.waitForUnitToLaunch(u.Name)
 	}
 }
 
 func (d *deployer) performSequentialDeployment(sg serviceGroup) {
 	for i, u := range sg.serviceNodes {
-		if len(sg.sidekicks) > 0 {
-			skName := strings.Replace(u.Name, "@", "-sidekick@", 1)
-			for _, sk := range sg.sidekicks {
-				if sk.Name == skName {
-					d.updateUnit(sk)
-					if err := d.fleetapi.SetUnitTargetState(sk.Name, "launched"); err != nil {
-						log.Printf("WARNING Failed to set target state for unit %s: %v [SKIPPING]", u.Name, err)
-					}
-					break
-				}
-			}
-		}
+		d.updateCorrespondingSK(u, sg.sidekicks)
 		d.updateUnit(u)
 		if err := d.fleetapi.SetUnitTargetState(u.Name, "launched"); err != nil {
-			log.Printf("WARNING Failed to set target state for unit %s: %v [SKIPPING]", u.Name, err)
 			continue
 		}
 		if (i + 1) == len(sg.serviceNodes) { //this is the last node, we're done
@@ -339,36 +295,53 @@ func (d *deployer) performSequentialDeployment(sg serviceGroup) {
 			unitToWaitOn = strings.Replace(u.Name, "@", "-sidekick@", 1)
 		}
 
-		// every 30 seconds, check if the unit to wait on is up - for a maximum of 5 minutes
-		timeoutChan := make(chan bool)
-		go func() {
-			<-time.After(time.Duration(5) * time.Minute)
-			close(timeoutChan)
-		}()
+		d.waitForUnitToLaunch(unitToWaitOn)
+	}
+}
 
-		tickerChan := time.NewTicker(time.Duration(30) * time.Second)
-		for {
-			select {
-			case <-tickerChan.C:
-				unitStatus, err := d.fleetapi.Unit(unitToWaitOn)
-				if err != nil {
-					log.Printf("WARNING Failed to get unit %s: %v [SKIPPING]", u.Name, err)
-					continue
-				}
-
-				log.Printf("INFO UnitToWaitOn status: [%v]\n", unitStatus.CurrentState)
-				if unitStatus.CurrentState == launchedState {
-					tickerChan.Stop()
-					break
-				}
-				continue
-			case <-timeoutChan:
-				tickerChan.Stop()
-				log.Printf("WARN Service [%v] didn't start up in time", u.Name)
-				break
-			}
+func (d *deployer) updateCorrespondingSK(service *schema.Unit, sidekicks []*schema.Unit) {
+	if len(sidekicks) == 0 {
+		return
+	}
+	skName := strings.Replace(service.Name, "@", "-sidekick@", 1)
+	for _, sk := range sidekicks {
+		if sk.Name == skName {
+			d.updateUnit(sk)
+			d.fleetapi.SetUnitTargetState(sk.Name, "launched")
 			break
 		}
+	}
+}
+
+func (d *deployer) waitForUnitToLaunch(unitName string) {
+	timeoutChan := make(chan bool)
+	go func() {
+		<-time.After(launchTimeout)
+		close(timeoutChan)
+	}()
+
+	tickerChan := time.NewTicker(stateCheckInterval)
+	for {
+		select {
+		case <-tickerChan.C:
+			unitStatus, err := d.fleetapi.Unit(unitName)
+			if err != nil {
+				log.Printf("WARNING Failed to get unit %s: %v [SKIPPING]", unitName, err)
+				continue
+			}
+
+			log.Printf("INFO UnitToWaitOn status: [%v]\n", unitStatus.CurrentState)
+			if unitStatus.CurrentState == launchedState {
+				tickerChan.Stop()
+				break
+			}
+			continue
+		case <-timeoutChan:
+			tickerChan.Stop()
+			log.Printf("WARN Service [%v] didn't start up in time", unitName)
+			break
+		}
+		break
 	}
 }
 
