@@ -14,7 +14,6 @@ import (
 	"github.com/coreos/fleet/client"
 	"github.com/coreos/fleet/schema"
 	"github.com/coreos/fleet/unit"
-	"github.com/kr/pretty"
 	"golang.org/x/net/proxy"
 )
 
@@ -22,6 +21,8 @@ type deployer struct {
 	fleetapi                client.API
 	serviceDefinitionClient serviceDefinitionClient
 }
+
+const launchedState = "launched"
 
 var whitespaceMatcher, _ = regexp.Compile("\\s+")
 
@@ -63,7 +64,6 @@ func newDeployer() (*deployer, error) {
 }
 
 func (d *deployer) deployAll() error {
-	log.Printf("DEBUG Starting deployAll().")
 	wantedServiceGroups, err := d.buildWantedUnits()
 	if err != nil {
 		return err
@@ -77,12 +77,12 @@ func (d *deployer) deployAll() error {
 
 	toUpdatedRegularSGs, toUpdateSKRegularSGs, toUpdateSequentially, toUpdateSKSequentially := d.identifyUpdatedServiceGroups(wantedServiceGroups)
 
-	log.Printf("DEBUG: Service groups to create: [%v]", toCreate)
-	log.Printf("DEBUG: Service groups to update normally: [%v]", toUpdatedRegularSGs)
-	log.Printf("DEBUG: Service groups to update sequentially: [%v]", toUpdateSequentially)
-	log.Printf("DEBUG: Service groups to update SK only: [%v]", toUpdateSKRegularSGs)
-	log.Printf("DEBUG: Service groups to update SK sequentially: [%v]", toUpdateSKSequentially)
-	log.Printf("DEBUG: Service groups to delete: [%v]", toDelete)
+	log.Printf("DEBUG: Service groups to create: [%v]\n", toCreate)
+	log.Printf("DEBUG: Service groups to update normally: [%v]\n", toUpdatedRegularSGs)
+	log.Printf("DEBUG: Service groups to update sequentially: [%v]\n", toUpdateSequentially)
+	log.Printf("DEBUG: Service groups to update SK only: [%v]\n", toUpdateSKRegularSGs)
+	log.Printf("DEBUG: Service groups to update SK sequentially: [%v]\n", toUpdateSKSequentially)
+	log.Printf("DEBUG: Service groups to delete: [%v]\n", toDelete)
 
 	d.createServiceGroups(toCreate)
 	d.updateServiceGroupsNormally(toUpdatedRegularSGs)
@@ -95,7 +95,6 @@ func (d *deployer) deployAll() error {
 
 	toLaunch := mergeMaps(toCreate, toUpdatedRegularSGs, toUpdateSKRegularSGs)
 	d.launchAll(toLaunch)
-	log.Printf("DEBUG Finished deployAll().")
 	return nil
 }
 
@@ -110,13 +109,12 @@ func mergeMaps(maps ...map[string]serviceGroup) map[string]serviceGroup {
 }
 
 func purgeProcessed(wanted map[string]serviceGroup, processed map[string]serviceGroup) {
-	for key, _ := range processed {
+	for key := range processed {
 		delete(wanted, key)
 	}
 }
 
 func (d *deployer) identifyNewServiceGroups(serviceGroups map[string]serviceGroup) map[string]serviceGroup {
-	log.Printf("DEBUG Started identifyNewServiceGroups().")
 	newServiceGroups := make(map[string]serviceGroup)
 	for name, sg := range serviceGroups {
 		isNew, err := d.isNewUnit(sg.serviceNodes[0])
@@ -127,12 +125,10 @@ func (d *deployer) identifyNewServiceGroups(serviceGroups map[string]serviceGrou
 			newServiceGroups[name] = sg
 		}
 	}
-	log.Printf("DEBUG Finished identifyNewServiceGroups().")
 	return newServiceGroups
 }
 
 func (d *deployer) identifyUpdatedServiceGroups(serviceGroups map[string]serviceGroup) (map[string]serviceGroup, map[string]serviceGroup, map[string]serviceGroup, map[string]serviceGroup) {
-	log.Printf("DEBUG Started identifyUpdatedServiceGroups().")
 	updatedRegularSGs := make(map[string]serviceGroup)
 	skUpdatedRegularSGs := make(map[string]serviceGroup)
 
@@ -168,12 +164,10 @@ func (d *deployer) identifyUpdatedServiceGroups(serviceGroups map[string]service
 			continue
 		}
 	}
-	log.Printf("DEBUG Finished identifyUpdatedServiceGroups().")
 	return updatedRegularSGs, skUpdatedRegularSGs, updatedSequentialSGs, skUpdatedSequentialSGs
 }
 
 func (d *deployer) identifyDeletedServiceGroups(wantedServiceGroups map[string]serviceGroup) map[string]serviceGroup {
-	log.Printf("DEBUG Started identifyDeletedServiceGroups().")
 	deletedServiceGroups := make(map[string]serviceGroup)
 
 	currentUnits, err := d.buildCurrentUnits()
@@ -194,12 +188,10 @@ func (d *deployer) identifyDeletedServiceGroups(wantedServiceGroups map[string]s
 			}
 		}
 	}
-	log.Printf("DEBUG Finished identifyDeletedServiceGroups().")
 	return deletedServiceGroups
 }
 
 func (d *deployer) createServiceGroups(serviceGroups map[string]serviceGroup) {
-	log.Printf("DEBUG Starting createServiceGroups().")
 	for _, sg := range serviceGroups {
 		for _, u := range sg.serviceNodes {
 			if err := d.fleetapi.CreateUnit(u); err != nil {
@@ -217,21 +209,17 @@ func (d *deployer) createServiceGroups(serviceGroups map[string]serviceGroup) {
 			//log.Printf("DesiredState for [%s]: [%s]", u.Name, u.DesiredState)
 		}
 	}
-	log.Printf("DEBUG Finished createServiceGroups().")
 }
 
 func (d *deployer) updateServiceGroupsSKsOnly(serviceGroups map[string]serviceGroup) {
-	log.Printf("DEBUG Starting updateServiceGroupsSKsOnly().")
 	for _, sg := range serviceGroups {
 		for _, u := range sg.sidekicks {
 			d.updateUnit(u)
 		}
 	}
-	log.Printf("DEBUG Finish updateServiceGroupsSKsOnly().")
 }
 
 func (d *deployer) updateServiceGroupsNormally(serviceGroups map[string]serviceGroup) {
-	log.Printf("DEBUG Starting updateServiceGroupsNormally().")
 	for _, sg := range serviceGroups {
 		for _, u := range sg.serviceNodes {
 			d.updateUnit(u)
@@ -240,27 +228,21 @@ func (d *deployer) updateServiceGroupsNormally(serviceGroups map[string]serviceG
 			d.updateUnit(u)
 		}
 	}
-	log.Printf("DEBUG Finish updateServiceGroupsNormally().")
 }
 
 func (d *deployer) updateServiceGroupsSequentially(serviceGroups map[string]serviceGroup) {
-	log.Printf("DEBUG Starting updateServiceGroupsSequentially().")
 	for _, sg := range serviceGroups {
 		d.performSequentialDeployment(sg)
 	}
-	log.Printf("DEBUG Finish updateServiceGroupsSequentially().")
 }
 
 func (d *deployer) updateServiceGroupsSKsSequentially(serviceGroups map[string]serviceGroup) {
-	log.Printf("DEBUG Starting updateServiceGroupsSKsSequentially().")
 	for _, sg := range serviceGroups {
 		d.performSequentialDeploymentSK(sg)
 	}
-	log.Printf("DEBUG Finish updateServiceGroupsSKsSequentially().")
 }
 
 func (d *deployer) deleteServiceGroups(serviceGroups map[string]serviceGroup) {
-	log.Printf("DEBUG Starting deleteServiceGroups().")
 	for _, sg := range serviceGroups {
 		for _, u := range sg.serviceNodes {
 			if err := d.fleetapi.DestroyUnit(u.Name); err != nil {
@@ -276,11 +258,9 @@ func (d *deployer) deleteServiceGroups(serviceGroups map[string]serviceGroup) {
 			}
 		}
 	}
-	log.Printf("DEBUG Finish deleteServiceGroups().")
 }
 
 func (d *deployer) buildWantedUnits() (map[string]serviceGroup, error) {
-	log.Printf("DEBUG Starting buildWantedUnits()")
 	servicesDefinition, err := d.serviceDefinitionClient.servicesDefinition()
 	if err != nil {
 		log.Printf("ERROR Cannot read services definition: [%v]. \nAborting run!", err)
@@ -325,7 +305,6 @@ func (d *deployer) buildWantedUnits() (map[string]serviceGroup, error) {
 			log.Printf("WARNING skipping service: %s, incorrect service definition", srv.Name)
 		}
 	}
-	log.Printf("DEBUG Finish buildWantedUnits()")
 	return wantedUnits, nil
 }
 
@@ -338,7 +317,6 @@ func (d *deployer) isNewUnit(u *schema.Unit) (bool, error) {
 }
 
 func (d *deployer) performSequentialDeploymentSK(sg serviceGroup) {
-	log.Println("Starting performSequentialDeploymentSK()")
 	for i, u := range sg.sidekicks {
 		d.updateUnit(u)
 		if err := d.fleetapi.SetUnitTargetState(u.Name, "launched"); err != nil {
@@ -370,7 +348,7 @@ func (d *deployer) performSequentialDeploymentSK(sg serviceGroup) {
 				}
 
 				log.Printf("INFO UnitToWaitOn status: [%v]\n", unitStatus.CurrentState)
-				if unitStatus.CurrentState == "launched" {
+				if unitStatus.CurrentState == launchedState {
 					tickerChan.Stop()
 					break
 				}
@@ -383,12 +361,9 @@ func (d *deployer) performSequentialDeploymentSK(sg serviceGroup) {
 			break
 		}
 	}
-	log.Println("Finished performSequentialDeploymentSK()")
 }
 
 func (d *deployer) performSequentialDeployment(sg serviceGroup) {
-	//update sidekicks first
-	log.Println("Starting performSequentialDeployment()")
 	for i, u := range sg.serviceNodes {
 		if len(sg.sidekicks) > 0 {
 			skName := strings.Replace(u.Name, "@", "-sidekick@", 1)
@@ -436,7 +411,7 @@ func (d *deployer) performSequentialDeployment(sg serviceGroup) {
 				}
 
 				log.Printf("INFO UnitToWaitOn status: [%v]\n", unitStatus.CurrentState)
-				if unitStatus.CurrentState == "launched" {
+				if unitStatus.CurrentState == launchedState {
 					tickerChan.Stop()
 					break
 				}
@@ -449,11 +424,9 @@ func (d *deployer) performSequentialDeployment(sg serviceGroup) {
 			break
 		}
 	}
-	log.Println("Finished performSequentialDeployment()")
 }
 
 func (d *deployer) buildCurrentUnits() (map[string]*schema.Unit, error) {
-	//log.Println("DEBUG Starting buildCurrentUnits()")
 	all, err := d.fleetapi.Units()
 	if err != nil {
 		return nil, err
@@ -463,32 +436,23 @@ func (d *deployer) buildCurrentUnits() (map[string]*schema.Unit, error) {
 	for _, u := range all {
 		units[u.Name] = u
 	}
-	//log.Println("DEBUG Finished buildCurrentUnits()")
 	return units, nil
 }
 
 func (d *deployer) launchAll(serviceGroups map[string]serviceGroup) error {
-	log.Println("DEBUG: Starting launchAll()")
-	log.Printf("Launching sgs: [%# v]", pretty.Formatter(serviceGroups))
 	currentUnits, err := d.buildCurrentUnits()
 	if err != nil {
 		log.Printf("Error building current Units: [%s]", err.Error())
 		return err
 	}
-	log.Println("Just before iterating over sgs")
-	for sgName, sg := range serviceGroups {
-		log.Printf("Iterating over sg [%s]", sgName)
+	for _, sg := range serviceGroups {
 		for _, u := range sg.serviceNodes {
-			log.Println("Iterating over services")
 			d.launchUnit(u, currentUnits)
 		}
 		for _, u := range sg.sidekicks {
-			log.Println("Iterating over sidekicks")
 			d.launchUnit(u, currentUnits)
 		}
 	}
-	log.Println("DEBUG: Finished launchAll()")
-	//TODO handle
 	return nil
 }
 
@@ -566,7 +530,6 @@ func (d *deployer) updateUnit(u *schema.Unit) {
 	u.DesiredState = "inactive"
 	if err := d.fleetapi.DestroyUnit(u.Name); err != nil {
 		log.Printf("WARNING Failed to destroy unit %s: %v [SKIPPING]", u.Name, err)
-		//TODO this handling ok?
 		return
 	}
 
@@ -578,40 +541,29 @@ func (d *deployer) updateUnit(u *schema.Unit) {
 }
 
 func (d *deployer) launchUnit(u *schema.Unit, currentUnits map[string]*schema.Unit) {
-	log.Printf("Launching unit [%s]", u.Name)
 	if u.DesiredState == "" {
-		u.DesiredState = "launched"
+		u.DesiredState = launchedState
 	} else {
 		log.Printf("Special desiredState: [%s]", u.DesiredState)
 	}
 
 	if currentUnit, ok := currentUnits[u.Name]; ok {
-		log.Printf("Found in the currentUnits map")
 		if currentUnit.DesiredState != u.DesiredState {
-			log.Printf("current desired state doesn't match unit desired state")
 			err := d.fleetapi.SetUnitTargetState(u.Name, u.DesiredState)
 			if err != nil {
 				log.Printf("ERROR Could not set desired state [%s] for unit [%s]", u.DesiredState, u.Name)
 			}
-		} else {
-			log.Printf("current desired state DOES match unit desired state")
 		}
-
 	} else {
-		log.Printf("Not found in the currentUnits map")
 		err := d.fleetapi.SetUnitTargetState(u.Name, u.DesiredState)
 		if err != nil {
 			log.Printf("ERROR Could not set desired state [%s] for unit [%s]", u.DesiredState, u.Name)
 		}
 	}
-	log.Printf("Launching unit [%s] DONE", u.Name)
 }
 
 func updateServiceGroupMap(u *schema.Unit, serviceName string, isSidekick bool, serviceGroups map[string]serviceGroup) map[string]serviceGroup {
-	//log.Printf("updateServiceGroupMap for unit [%s], servicename [%s], isSidekick[%s]\n", u.Name, serviceName, isSidekick)
-	//log.Printf("SG before: [%# v]", serviceGroups)
 	if sg, ok := serviceGroups[serviceName]; ok {
-		//log.Printf("Found SG")
 		if isSidekick {
 			sg.sidekicks = append(sg.sidekicks, u)
 		} else {
@@ -619,14 +571,12 @@ func updateServiceGroupMap(u *schema.Unit, serviceName string, isSidekick bool, 
 		}
 		serviceGroups[serviceName] = sg
 	} else {
-		//log.Printf("Not Found SG")
 		if isSidekick {
 			serviceGroups[serviceName] = serviceGroup{serviceNodes: []*schema.Unit{}, sidekicks: []*schema.Unit{u}}
 		} else {
 			serviceGroups[serviceName] = serviceGroup{serviceNodes: []*schema.Unit{u}, sidekicks: []*schema.Unit{}}
 		}
 	}
-	//log.Printf("SG after: [%# v]", serviceGroups)
 	return serviceGroups
 }
 
