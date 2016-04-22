@@ -23,6 +23,7 @@ type deployer struct {
 }
 
 const launchedState = "launched"
+const inactiveState = "inactive"
 
 var whitespaceMatcher, _ = regexp.Compile("\\s+")
 
@@ -68,60 +69,31 @@ func (d *deployer) deployAll() error {
 	if err != nil {
 		return err
 	}
-	//log.Printf("DEBUG: Wanted Service groups \n: [%# v] \n", pretty.Formatter(wantedServiceGroups))
 
 	toDelete := d.identifyDeletedServiceGroups(wantedServiceGroups)
-
 	toCreate := d.identifyNewServiceGroups(wantedServiceGroups)
 	purgeProcessed(wantedServiceGroups, toCreate)
-
-	toUpdatedRegularSGs, toUpdateSKRegularSGs, toUpdateSequentially, toUpdateSKSequentially := d.identifyUpdatedServiceGroups(wantedServiceGroups)
-
-	log.Printf("DEBUG: Service groups to create: [%v]\n", toCreate)
-	log.Printf("DEBUG: Service groups to update normally: [%v]\n", toUpdatedRegularSGs)
-	log.Printf("DEBUG: Service groups to update sequentially: [%v]\n", toUpdateSequentially)
-	log.Printf("DEBUG: Service groups to update SK only: [%v]\n", toUpdateSKRegularSGs)
-	log.Printf("DEBUG: Service groups to update SK sequentially: [%v]\n", toUpdateSKSequentially)
-	log.Printf("DEBUG: Service groups to delete: [%v]\n", toDelete)
+	toUpdateRegular, toUpdateSKRegular, toUpdateSequentially, toUpdateSKSequentially := d.identifyUpdatedServiceGroups(wantedServiceGroups)
 
 	d.createServiceGroups(toCreate)
-	d.updateServiceGroupsNormally(toUpdatedRegularSGs)
+	d.updateServiceGroupsNormally(toUpdateRegular)
 	d.updateServiceGroupsSequentially(toUpdateSequentially)
-
-	d.updateServiceGroupsSKsOnly(toUpdateSKRegularSGs)
+	d.updateServiceGroupsSKsOnly(toUpdateSKRegular)
 	d.updateServiceGroupsSKsSequentially(toUpdateSKSequentially)
-
 	d.deleteServiceGroups(toDelete)
 
-	toLaunch := mergeMaps(toCreate, toUpdatedRegularSGs, toUpdateSKRegularSGs)
-	d.launchAll(toLaunch)
+	toLaunch := mergeMaps(toCreate, toUpdateRegular, toUpdateSKRegular)
+	err = d.launchAll(toLaunch)
+	if err != nil {
+		log.Printf("ERROR Cannot launch all services: [%v]", err)
+	}
 	return nil
-}
-
-func mergeMaps(maps ...map[string]serviceGroup) map[string]serviceGroup {
-	merged := make(map[string]serviceGroup)
-	for _, sgMap := range maps {
-		for k, v := range sgMap {
-			merged[k] = v
-		}
-	}
-	return merged
-}
-
-func purgeProcessed(wanted map[string]serviceGroup, processed map[string]serviceGroup) {
-	for key := range processed {
-		delete(wanted, key)
-	}
 }
 
 func (d *deployer) identifyNewServiceGroups(serviceGroups map[string]serviceGroup) map[string]serviceGroup {
 	newServiceGroups := make(map[string]serviceGroup)
 	for name, sg := range serviceGroups {
-		isNew, err := d.isNewUnit(sg.serviceNodes[0])
-		if err != nil {
-			log.Printf("WARNING Failed to determine if it's a new unit %s: %v [SKIPPING]", sg.serviceNodes[0].Name, err)
-		}
-		if isNew {
+		if d.isNewUnit(sg.serviceNodes[0]) {
 			newServiceGroups[name] = sg
 		}
 	}
@@ -129,84 +101,67 @@ func (d *deployer) identifyNewServiceGroups(serviceGroups map[string]serviceGrou
 }
 
 func (d *deployer) identifyUpdatedServiceGroups(serviceGroups map[string]serviceGroup) (map[string]serviceGroup, map[string]serviceGroup, map[string]serviceGroup, map[string]serviceGroup) {
-	updatedRegularSGs := make(map[string]serviceGroup)
-	skUpdatedRegularSGs := make(map[string]serviceGroup)
-
-	updatedSequentialSGs := make(map[string]serviceGroup)
-	skUpdatedSequentialSGs := make(map[string]serviceGroup)
+	updatedRegular := make(map[string]serviceGroup)
+	skUpdatedRegular := make(map[string]serviceGroup)
+	updatedSequential := make(map[string]serviceGroup)
+	skUpdatedSequential := make(map[string]serviceGroup)
 
 	for name, sg := range serviceGroups {
-		isUpdated, err := d.isUpdatedUnit(sg.serviceNodes[0])
-		if err != nil {
-			log.Printf("WARNING Failed to determine if it's an updated unit %s: %v [SKIPPING]", sg.serviceNodes[0].Name, err)
-		}
-		if isUpdated {
+		if d.isUpdatedUnit(sg.serviceNodes[0]) {
 			if sg.isZDD {
-				updatedSequentialSGs[name] = sg
+				updatedSequential[name] = sg
 			} else {
-				updatedRegularSGs[name] = sg
+				updatedRegular[name] = sg
 			}
 			continue
 		}
 
-		if len(sg.sidekicks) > 0 {
-			isUpdated, err = d.isUpdatedUnit(sg.sidekicks[0])
-			if err != nil {
-				log.Printf("WARNING Failed to determine if it's an updated unit %s: %v [SKIPPING]", sg.serviceNodes[0].Name, err)
-			}
+		if len(sg.sidekicks) == 0 {
+			continue
 		}
-		if isUpdated {
+
+		if d.isUpdatedUnit(sg.sidekicks[0]) {
 			if sg.isZDD {
-				skUpdatedSequentialSGs[name] = sg
+				skUpdatedSequential[name] = sg
 			} else {
-				skUpdatedRegularSGs[name] = sg
+				skUpdatedRegular[name] = sg
 			}
 			continue
 		}
 	}
-	return updatedRegularSGs, skUpdatedRegularSGs, updatedSequentialSGs, skUpdatedSequentialSGs
+	return updatedRegular, skUpdatedRegular, updatedSequential, skUpdatedSequential
 }
 
 func (d *deployer) identifyDeletedServiceGroups(wantedServiceGroups map[string]serviceGroup) map[string]serviceGroup {
 	deletedServiceGroups := make(map[string]serviceGroup)
-
 	currentUnits, err := d.buildCurrentUnits()
 	if err != nil {
-		//TODO log
-		return nil
+		log.Printf("ERROR: Cannot build current units list -> Cannot identify deleted services: [%v]", err)
+		return make(map[string]serviceGroup)
 	}
+
 	for _, u := range currentUnits {
-		//log.Printf("Checking [%s]", u.Name)
 		serviceName := getServiceName(u.Name)
-		//log.Printf("Service name [%s]", serviceName)
 		if _, ok := wantedServiceGroups[serviceName]; !ok {
 			//Do not destroy the deployer itself
 			if _, ok := destroyServiceBlacklist[u.Name]; !ok {
 				isSidekick := strings.Contains(u.Name, "sidekick")
-				//log.Printf("Sentencing to death: [%s]", serviceName)
 				deletedServiceGroups = updateServiceGroupMap(u, serviceName, isSidekick, deletedServiceGroups)
 			}
 		}
 	}
+
 	return deletedServiceGroups
 }
 
 func (d *deployer) createServiceGroups(serviceGroups map[string]serviceGroup) {
-	for _, sg := range serviceGroups {
+	for sgName, sg := range serviceGroups {
+		log.Printf("INFO Creating SG [%s].", sgName)
 		for _, u := range sg.serviceNodes {
-			if err := d.fleetapi.CreateUnit(u); err != nil {
-				log.Printf("WARNING Failed to create unit %s: %v [SKIPPING]", u.Name, err)
-				//TODO this handling ok
-				continue
-			}
-			//log.Printf("DesiredState for [%s]: [%s]", u.Name, u.DesiredState)
+			d.fleetapi.CreateUnit(u)
 		}
 		for _, u := range sg.sidekicks {
-			if err := d.fleetapi.CreateUnit(u); err != nil {
-				log.Printf("WARNING Failed to create unit %s: %v [SKIPPING]", u.Name, err)
-				continue
-			}
-			//log.Printf("DesiredState for [%s]: [%s]", u.Name, u.DesiredState)
+			d.fleetapi.CreateUnit(u)
 		}
 	}
 }
@@ -245,17 +200,10 @@ func (d *deployer) updateServiceGroupsSKsSequentially(serviceGroups map[string]s
 func (d *deployer) deleteServiceGroups(serviceGroups map[string]serviceGroup) {
 	for _, sg := range serviceGroups {
 		for _, u := range sg.serviceNodes {
-			if err := d.fleetapi.DestroyUnit(u.Name); err != nil {
-				log.Printf("WARNING Failed to destroy unit %s: %v [SKIPPING]", u.Name, err)
-				//TODO this handling ok?
-				continue
-			}
+			d.fleetapi.DestroyUnit(u.Name)
 		}
 		for _, u := range sg.sidekicks {
-			if err := d.fleetapi.DestroyUnit(u.Name); err != nil {
-				log.Printf("WARNING Failed to destroy unit %s: %v [SKIPPING]", u.Name, err)
-				continue
-			}
+			d.fleetapi.DestroyUnit(u.Name)
 		}
 	}
 }
@@ -269,7 +217,6 @@ func (d *deployer) buildWantedUnits() (map[string]serviceGroup, error) {
 
 	wantedUnits := make(map[string]serviceGroup)
 	for _, srv := range servicesDefinition.Services {
-		log.Printf("DEBUG Processing [%s].", srv.Name)
 		serviceFile, err := d.makeServiceFile(srv)
 		if err != nil {
 			return nil, err
@@ -285,11 +232,9 @@ func (d *deployer) buildWantedUnits() (map[string]serviceGroup, error) {
 		isSidekick := strings.Contains(srv.Name, "sidekick")
 
 		if srv.Count == 0 && !strings.Contains(srv.Name, "@") {
-			//log.Printf("DEBUG [%s] non templated service.", serviceName)
 			u := buildUnit(srv.Name, uf, srv.DesiredState)
 			wantedUnits = updateServiceGroupMap(u, serviceName, isSidekick, wantedUnits)
 		} else if srv.Count > 0 && strings.Contains(srv.Name, "@") {
-			//log.Printf("DEBUG [%s] templated service.", serviceName)
 			for i := 0; i < srv.Count; i++ {
 				nodeName := strings.Replace(srv.Name, "@", fmt.Sprintf("@%d", i+1), -1)
 				u := buildUnit(nodeName, uf, srv.DesiredState)
@@ -308,12 +253,13 @@ func (d *deployer) buildWantedUnits() (map[string]serviceGroup, error) {
 	return wantedUnits, nil
 }
 
-func (d *deployer) isNewUnit(u *schema.Unit) (bool, error) {
+func (d *deployer) isNewUnit(u *schema.Unit) bool {
 	currentUnit, err := d.fleetapi.Unit(u.Name)
 	if err != nil {
-		return false, err
+		log.Printf("WARN Failed to determine if it's a new unit %s: %v", u.Name, err)
+		return false
 	}
-	return currentUnit == nil, nil
+	return currentUnit == nil
 }
 
 func (d *deployer) performSequentialDeploymentSK(sg serviceGroup) {
@@ -456,10 +402,11 @@ func (d *deployer) launchAll(serviceGroups map[string]serviceGroup) error {
 	return nil
 }
 
-func (d *deployer) isUpdatedUnit(newUnit *schema.Unit) (bool, error) {
+func (d *deployer) isUpdatedUnit(newUnit *schema.Unit) bool {
 	currentUnit, err := d.fleetapi.Unit(newUnit.Name)
 	if err != nil {
-		return false, err
+		log.Printf("WARNING Failed to determine if it's an updated unit %s: %v.", newUnit.Name, err)
+		return false
 	}
 
 	nuf := schema.MapSchemaUnitOptionsToUnitFile(newUnit.Options)
@@ -472,29 +419,7 @@ func (d *deployer) isUpdatedUnit(newUnit *schema.Unit) (bool, error) {
 		option.Value = whitespaceMatcher.ReplaceAllString(option.Value, " ")
 	}
 
-	return nuf.Hash() != cuf.Hash(), nil
-}
-
-func renderedServiceFile(serviceTemplate []byte, context map[string]interface{}) (string, error) {
-	if context["version"] == "" {
-		return string(serviceTemplate), nil
-	}
-	versionString := fmt.Sprintf("DOCKER_APP_VERSION=%s", context["version"])
-	serviceTemplateString := strings.Replace(string(serviceTemplate), "DOCKER_APP_VERSION=latest", versionString, 1)
-	return serviceTemplateString, nil
-}
-
-func getServiceName(unitName string) string {
-	if strings.Contains(unitName, "sidekick") { //sidekick
-		return strings.Split(unitName, "-sidekick")[0]
-	}
-	if strings.Contains(unitName, "@.service") { //templated without node number
-		return strings.Split(unitName, "@.service")[0]
-	}
-	if strings.Contains(unitName, "@") { //templated with node number
-		return strings.Split(unitName, "@")[0]
-	}
-	return strings.Split(unitName, ".service")[0] //not templated
+	return nuf.Hash() != cuf.Hash()
 }
 
 func (d *deployer) makeServiceFile(s service) (string, error) {
@@ -505,9 +430,9 @@ func (d *deployer) makeServiceFile(s service) (string, error) {
 		return "", err
 	}
 	vars["version"] = s.Version
-	serviceFile, err := renderedServiceFile(serviceTemplate, vars)
+	serviceFile, err := renderServiceFile(serviceTemplate, vars)
 	if err != nil {
-		log.Printf("%v", err)
+		log.Printf("ERROR Cannot render service file: %v", err)
 		return "", err
 	}
 	return serviceFile, nil
@@ -518,7 +443,6 @@ func (d *deployer) makeUnitFile(serviceFile string) (*unit.UnitFile, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	for _, option := range uf.Options {
 		option.Value = strings.Replace(option.Value, "\\\n", " ", -1)
 	}
@@ -527,14 +451,11 @@ func (d *deployer) makeUnitFile(serviceFile string) (*unit.UnitFile, error) {
 
 func (d *deployer) updateUnit(u *schema.Unit) {
 	originalDesiredState := u.DesiredState
-	u.DesiredState = "inactive"
+	u.DesiredState = inactiveState
 	if err := d.fleetapi.DestroyUnit(u.Name); err != nil {
-		log.Printf("WARNING Failed to destroy unit %s: %v [SKIPPING]", u.Name, err)
 		return
 	}
-
 	if err := d.fleetapi.CreateUnit(u); err != nil {
-		log.Printf("WARNING Failed to create unit %s: %v [SKIPPING]", u.Name, err)
 		return
 	}
 	u.DesiredState = originalDesiredState
@@ -543,22 +464,13 @@ func (d *deployer) updateUnit(u *schema.Unit) {
 func (d *deployer) launchUnit(u *schema.Unit, currentUnits map[string]*schema.Unit) {
 	if u.DesiredState == "" {
 		u.DesiredState = launchedState
-	} else {
-		log.Printf("Special desiredState: [%s]", u.DesiredState)
 	}
-
 	if currentUnit, ok := currentUnits[u.Name]; ok {
 		if currentUnit.DesiredState != u.DesiredState {
-			err := d.fleetapi.SetUnitTargetState(u.Name, u.DesiredState)
-			if err != nil {
-				log.Printf("ERROR Could not set desired state [%s] for unit [%s]", u.DesiredState, u.Name)
-			}
+			d.fleetapi.SetUnitTargetState(u.Name, u.DesiredState)
 		}
 	} else {
-		err := d.fleetapi.SetUnitTargetState(u.Name, u.DesiredState)
-		if err != nil {
-			log.Printf("ERROR Could not set desired state [%s] for unit [%s]", u.DesiredState, u.Name)
-		}
+		d.fleetapi.SetUnitTargetState(u.Name, u.DesiredState)
 	}
 }
 
@@ -586,4 +498,42 @@ func buildUnit(name string, uf *unit.UnitFile, desiredState string) *schema.Unit
 		Options:      schema.MapUnitFileToSchemaUnitOptions(uf),
 		DesiredState: desiredState,
 	}
+}
+
+func mergeMaps(maps ...map[string]serviceGroup) map[string]serviceGroup {
+	merged := make(map[string]serviceGroup)
+	for _, sgMap := range maps {
+		for k, v := range sgMap {
+			merged[k] = v
+		}
+	}
+	return merged
+}
+
+func purgeProcessed(wanted map[string]serviceGroup, processed map[string]serviceGroup) {
+	for key := range processed {
+		delete(wanted, key)
+	}
+}
+
+func renderServiceFile(serviceTemplate []byte, context map[string]interface{}) (string, error) {
+	if context["version"] == "" {
+		return string(serviceTemplate), nil
+	}
+	versionString := fmt.Sprintf("DOCKER_APP_VERSION=%s", context["version"])
+	serviceTemplateString := strings.Replace(string(serviceTemplate), "DOCKER_APP_VERSION=latest", versionString, 1)
+	return serviceTemplateString, nil
+}
+
+func getServiceName(unitName string) string {
+	if strings.Contains(unitName, "sidekick") { //sidekick
+		return strings.Split(unitName, "-sidekick")[0]
+	}
+	if strings.Contains(unitName, "@.service") { //templated without node number
+		return strings.Split(unitName, "@.service")[0]
+	}
+	if strings.Contains(unitName, "@") { //templated with node number
+		return strings.Split(unitName, "@")[0]
+	}
+	return strings.Split(unitName, ".service")[0] //not templated
 }

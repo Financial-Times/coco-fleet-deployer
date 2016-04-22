@@ -17,17 +17,29 @@ type noDestroyFleetAPI struct {
 
 func (lapi loggingFleetAPI) CreateUnit(unit *schema.Unit) error {
 	log.Printf("INFO Creating or updating unit %s\n", unit.Name)
-	return lapi.API.CreateUnit(unit)
+	err := lapi.API.CreateUnit(unit)
+	if err != nil {
+		log.Printf("WARN Failed to create unit %s: %v", unit.Name, err)
+	}
+	return err
 }
 
 func (lapi loggingFleetAPI) DestroyUnit(unit string) error {
 	log.Printf("INFO Destroying unit %s\n", unit)
-	return lapi.API.DestroyUnit(unit)
+	err := lapi.API.DestroyUnit(unit)
+	if err != nil {
+		log.Printf("WARN Failed to destroy unit %s: %v", unit, err)
+	}
+	return err
 }
 
 func (lapi loggingFleetAPI) SetUnitTargetState(name, desiredState string) error {
 	log.Printf("INFO Setting target state for %s to %s\n", name, desiredState)
-	return lapi.API.SetUnitTargetState(name, desiredState)
+	err := lapi.API.SetUnitTargetState(name, desiredState)
+	if err != nil {
+		log.Printf("ERROR Could not set desired state [%s] for unit [%s]", desiredState, name)
+	}
+	return err
 }
 
 func (api noDestroyFleetAPI) DestroyUnit(name string) error {
