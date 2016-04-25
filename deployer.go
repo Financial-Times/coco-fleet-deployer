@@ -15,6 +15,7 @@ import (
 	"github.com/coreos/fleet/schema"
 	"github.com/coreos/fleet/unit"
 	"golang.org/x/net/proxy"
+	"github.com/kr/pretty"
 )
 
 type deployer struct {
@@ -371,6 +372,8 @@ func (d *deployer) isUpdatedUnit(newUnit *schema.Unit) (bool, error) {
 		option.Value = whitespaceMatcher.ReplaceAllString(option.Value, " ")
 	}
 
+	log.Printf("Current: \n[%# v]\n", pretty.Formatter(cuf))
+	log.Printf("New    : \n[%# v]\n", pretty.Formatter(nuf))
 	return nuf.Hash() != cuf.Hash(), nil
 }
 
