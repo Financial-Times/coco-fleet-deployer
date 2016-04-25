@@ -121,11 +121,13 @@ func (d *deployer) updateCache(serviceGroups map[string]serviceGroup) {
 			d.unitCache[u.Name] = getUnitHash(u)
 		}
 	}
-	log.Printf("DEBUG Updated unit cache: [%# v]\n", pretty.Formatter(d.unitCache))
+	if len(serviceGroups) > 0 {
+		log.Printf("DEBUG Updated unit cache: [%# v]\n", pretty.Formatter(d.unitCache))
+	}
 }
 
-func (d *deployer) removeFromCache(toRemove map[string]serviceGroup) {
-	for _, sg := range toRemove {
+func (d *deployer) removeFromCache(serviceGroups map[string]serviceGroup) {
+	for _, sg := range serviceGroups {
 		for _, u := range sg.serviceNodes {
 			delete(d.unitCache, u.Name)
 		}
@@ -133,7 +135,9 @@ func (d *deployer) removeFromCache(toRemove map[string]serviceGroup) {
 			delete(d.unitCache, u.Name)
 		}
 	}
-	log.Printf("DEBUG Updated unit cache: [%# v]\n", pretty.Formatter(d.unitCache))
+	if len(serviceGroups) > 0 {
+		log.Printf("DEBUG Updated unit cache: [%# v]\n", pretty.Formatter(d.unitCache))
+	}
 }
 func (d *deployer) buildUnitCache() (map[string]unit.Hash, error) {
 	log.Println("DEBUG Bulding unit cache.")
