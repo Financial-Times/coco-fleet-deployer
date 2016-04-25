@@ -14,12 +14,14 @@ import (
 	"github.com/coreos/fleet/client"
 	"github.com/coreos/fleet/schema"
 	"github.com/coreos/fleet/unit"
+	"github.com/kr/pretty"
 	"golang.org/x/net/proxy"
 )
 
 type deployer struct {
 	fleetapi                client.API
 	serviceDefinitionClient serviceDefinitionClient
+	unitCache               map[string]unit.Hash
 }
 
 const launchedState = "launched"
@@ -63,10 +65,20 @@ func newDeployer() (*deployer, error) {
 		fleetHTTPAPIClient = noDestroyFleetAPI{fleetHTTPAPIClient}
 	}
 	serviceDefinitionClient := &httpServiceDefinitionClient{httpClient: &http.Client{}, rootURI: *rootURI}
+
 	return &deployer{fleetapi: fleetHTTPAPIClient, serviceDefinitionClient: serviceDefinitionClient}, nil
 }
 
 func (d *deployer) deployAll() error {
+	if d.unitCache == nil {
+		uc, err := d.buildUnitCache()
+		if err != nil {
+			log.Printf("Cannot build unit cache, aborting run: [%v]", err)
+			return err
+		}
+		d.unitCache = uc
+	}
+
 	wantedServiceGroups, err := d.buildWantedUnits()
 	if err != nil {
 		return err
@@ -84,12 +96,70 @@ func (d *deployer) deployAll() error {
 	d.updateServiceGroupsSKsSequentially(toUpdateSKSequentially)
 	d.deleteServiceGroups(toDelete)
 
+	log.Printf("toUpdateRegular:        [%v]", toUpdateRegular)
+	log.Printf("toUpdateSequentially:   [%v]", toUpdateSequentially)
+	log.Printf("toUpdateSKRegular:      [%v]", toUpdateSKRegular)
+	log.Printf("toUpdateSKSequentially: [%v]", toUpdateSKSequentially)
+
+	d.updateCache(mergeMaps(toCreate, toUpdateRegular, toUpdateSequentially, toUpdateSKRegular, toUpdateSKSequentially))
+	d.removeFromCache(toDelete)
+
 	toLaunch := mergeMaps(toCreate, toUpdateRegular, toUpdateSKRegular)
 	err = d.launchAll(toLaunch)
 	if err != nil {
 		log.Printf("ERROR Cannot launch all services: [%v]", err)
 	}
 	return nil
+}
+
+func (d *deployer) updateCache(serviceGroups map[string]serviceGroup) {
+	for _, sg := range serviceGroups {
+		for _, u := range sg.serviceNodes {
+			d.unitCache[u.Name] = getUnitHash(u)
+		}
+		for _, u := range sg.sidekicks {
+			d.unitCache[u.Name] = getUnitHash(u)
+		}
+	}
+	log.Printf("DEBUG Updated unit cache: [%# v]\n", pretty.Formatter(d.unitCache))
+}
+
+func (d *deployer) removeFromCache(toRemove map[string]serviceGroup) {
+	for _, sg := range toRemove {
+		for _, u := range sg.serviceNodes {
+			delete(d.unitCache, u.Name)
+		}
+		for _, u := range sg.sidekicks {
+			delete(d.unitCache, u.Name)
+		}
+	}
+	log.Printf("DEBUG Updated unit cache: [%# v]\n", pretty.Formatter(d.unitCache))
+}
+func (d *deployer) buildUnitCache() (map[string]unit.Hash, error) {
+	log.Println("DEBUG Bulding unit cache.")
+	units, err := d.fleetapi.Units()
+	if err != nil {
+		return nil, err
+	}
+
+	unitCache := make(map[string]unit.Hash)
+	for _, unit := range units {
+		unitFile := schema.MapSchemaUnitOptionsToUnitFile(unit.Options)
+		for _, option := range unitFile.Options {
+			option.Value = whitespaceMatcher.ReplaceAllString(option.Value, " ")
+		}
+		unitCache[unit.Name] = unitFile.Hash()
+	}
+	log.Printf("DEBUG Bulding unit cache done: [%# v]\n", pretty.Formatter(unitCache))
+	return unitCache, nil
+}
+
+func getUnitHash(unit *schema.Unit) unit.Hash {
+	unitFile := schema.MapSchemaUnitOptionsToUnitFile(unit.Options)
+	for _, option := range unitFile.Options {
+		option.Value = whitespaceMatcher.ReplaceAllString(option.Value, " ")
+	}
+	return unitFile.Hash()
 }
 
 func (d *deployer) identifyNewServiceGroups(serviceGroups map[string]serviceGroup) map[string]serviceGroup {
@@ -345,6 +415,7 @@ func (d *deployer) waitForUnitToLaunch(unitName string) {
 	}
 }
 
+//only name and desireState of the units are used
 func (d *deployer) buildCurrentUnits() (map[string]*schema.Unit, error) {
 	all, err := d.fleetapi.Units()
 	if err != nil {
@@ -376,23 +447,17 @@ func (d *deployer) launchAll(serviceGroups map[string]serviceGroup) error {
 }
 
 func (d *deployer) isUpdatedUnit(newUnit *schema.Unit) bool {
-	currentUnit, err := d.fleetapi.Unit(newUnit.Name)
-	if err != nil {
-		log.Printf("WARNING Failed to determine if it's an updated unit %s: %v.", newUnit.Name, err)
+	currentUnitHash, ok := d.unitCache[newUnit.Name]
+	if !ok {
+		log.Println("ERROR Current unit not found in cache: [%s]", newUnit.Name)
+		//TODO handle differently?
 		return false
 	}
-
-	nuf := schema.MapSchemaUnitOptionsToUnitFile(newUnit.Options)
-	cuf := schema.MapSchemaUnitOptionsToUnitFile(currentUnit.Options)
-
-	for _, option := range nuf.Options {
+	newUnitFile := schema.MapSchemaUnitOptionsToUnitFile(newUnit.Options)
+	for _, option := range newUnitFile.Options {
 		option.Value = whitespaceMatcher.ReplaceAllString(option.Value, " ")
 	}
-	for _, option := range cuf.Options {
-		option.Value = whitespaceMatcher.ReplaceAllString(option.Value, " ")
-	}
-
-	return nuf.Hash() != cuf.Hash()
+	return newUnitFile.Hash() != currentUnitHash
 }
 
 func (d *deployer) makeServiceFile(s service) (string, error) {
