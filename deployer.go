@@ -136,21 +136,9 @@ func (d *deployer) buildUnitCache() (map[string]unit.Hash, error) {
 
 	unitCache := make(map[string]unit.Hash)
 	for _, unit := range units {
-		unitFile := schema.MapSchemaUnitOptionsToUnitFile(unit.Options)
-		for _, option := range unitFile.Options {
-			option.Value = whitespaceMatcher.ReplaceAllString(option.Value, " ")
-		}
-		unitCache[unit.Name] = unitFile.Hash()
+		unitCache[unit.Name] = getUnitHash(unit)
 	}
 	return unitCache, nil
-}
-
-func getUnitHash(unit *schema.Unit) unit.Hash {
-	unitFile := schema.MapSchemaUnitOptionsToUnitFile(unit.Options)
-	for _, option := range unitFile.Options {
-		option.Value = whitespaceMatcher.ReplaceAllString(option.Value, " ")
-	}
-	return unitFile.Hash()
 }
 
 func (d *deployer) identifyNewServiceGroups(serviceGroups map[string]serviceGroup) map[string]serviceGroup {
@@ -440,7 +428,7 @@ func (d *deployer) launchAll(serviceGroups map[string]serviceGroup) error {
 func (d *deployer) isUpdatedUnit(newUnit *schema.Unit) bool {
 	currentUnitHash, ok := d.unitCache[newUnit.Name]
 	if !ok {
-		log.Println("ERROR Current unit not found in cache, marking as NOT updated: [%s]", newUnit.Name)
+		log.Printf("ERROR Current unit not found in cache, marking as NOT updated: [%s]", newUnit.Name)
 		return false
 	}
 	newUnitFile := schema.MapSchemaUnitOptionsToUnitFile(newUnit.Options)
@@ -564,4 +552,12 @@ func getServiceName(unitName string) string {
 		return strings.Split(unitName, "@")[0]
 	}
 	return strings.Split(unitName, ".service")[0] //not templated
+}
+
+func getUnitHash(unit *schema.Unit) unit.Hash {
+	unitFile := schema.MapSchemaUnitOptionsToUnitFile(unit.Options)
+	for _, option := range unitFile.Options {
+		option.Value = whitespaceMatcher.ReplaceAllString(option.Value, " ")
+	}
+	return unitFile.Hash()
 }
