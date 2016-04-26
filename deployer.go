@@ -14,7 +14,6 @@ import (
 	"github.com/coreos/fleet/client"
 	"github.com/coreos/fleet/schema"
 	"github.com/coreos/fleet/unit"
-	"github.com/kr/pretty"
 	"golang.org/x/net/proxy"
 )
 
@@ -96,11 +95,6 @@ func (d *deployer) deployAll() error {
 	d.updateServiceGroupsSKsSequentially(toUpdateSKSequentially)
 	d.deleteServiceGroups(toDelete)
 
-	log.Printf("toUpdateRegular:        [%v]", toUpdateRegular)
-	log.Printf("toUpdateSequentially:   [%v]", toUpdateSequentially)
-	log.Printf("toUpdateSKRegular:      [%v]", toUpdateSKRegular)
-	log.Printf("toUpdateSKSequentially: [%v]", toUpdateSKSequentially)
-
 	d.updateCache(mergeMaps(toCreate, toUpdateRegular, toUpdateSequentially, toUpdateSKRegular, toUpdateSKSequentially))
 	d.removeFromCache(toDelete)
 
@@ -121,9 +115,6 @@ func (d *deployer) updateCache(serviceGroups map[string]serviceGroup) {
 			d.unitCache[u.Name] = getUnitHash(u)
 		}
 	}
-	if len(serviceGroups) > 0 {
-		log.Printf("DEBUG Updated unit cache: [%# v]\n", pretty.Formatter(d.unitCache))
-	}
 }
 
 func (d *deployer) removeFromCache(serviceGroups map[string]serviceGroup) {
@@ -135,12 +126,9 @@ func (d *deployer) removeFromCache(serviceGroups map[string]serviceGroup) {
 			delete(d.unitCache, u.Name)
 		}
 	}
-	if len(serviceGroups) > 0 {
-		log.Printf("DEBUG Updated unit cache: [%# v]\n", pretty.Formatter(d.unitCache))
-	}
 }
+
 func (d *deployer) buildUnitCache() (map[string]unit.Hash, error) {
-	log.Println("DEBUG Bulding unit cache.")
 	units, err := d.fleetapi.Units()
 	if err != nil {
 		return nil, err
@@ -154,7 +142,6 @@ func (d *deployer) buildUnitCache() (map[string]unit.Hash, error) {
 		}
 		unitCache[unit.Name] = unitFile.Hash()
 	}
-	log.Printf("DEBUG Bulding unit cache done: [%# v]\n", pretty.Formatter(unitCache))
 	return unitCache, nil
 }
 
@@ -453,8 +440,7 @@ func (d *deployer) launchAll(serviceGroups map[string]serviceGroup) error {
 func (d *deployer) isUpdatedUnit(newUnit *schema.Unit) bool {
 	currentUnitHash, ok := d.unitCache[newUnit.Name]
 	if !ok {
-		log.Println("ERROR Current unit not found in cache: [%s]", newUnit.Name)
-		//TODO handle differently?
+		log.Println("ERROR Current unit not found in cache, marking as NOT updated: [%s]", newUnit.Name)
 		return false
 	}
 	newUnitFile := schema.MapSchemaUnitOptionsToUnitFile(newUnit.Options)
