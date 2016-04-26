@@ -431,11 +431,7 @@ func (d *deployer) isUpdatedUnit(newUnit *schema.Unit) bool {
 		log.Printf("ERROR Current unit not found in cache, marking as NOT updated: [%s]", newUnit.Name)
 		return false
 	}
-	newUnitFile := schema.MapSchemaUnitOptionsToUnitFile(newUnit.Options)
-	for _, option := range newUnitFile.Options {
-		option.Value = whitespaceMatcher.ReplaceAllString(option.Value, " ")
-	}
-	return newUnitFile.Hash() != currentUnitHash
+	return getUnitHash(newUnit) != currentUnitHash
 }
 
 func (d *deployer) makeServiceFile(s service) (string, error) {
