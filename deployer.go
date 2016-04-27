@@ -64,7 +64,6 @@ func newDeployer() (*deployer, error) {
 		fleetHTTPAPIClient = noDestroyFleetAPI{fleetHTTPAPIClient}
 	}
 	serviceDefinitionClient := &httpServiceDefinitionClient{httpClient: &http.Client{}, rootURI: *rootURI}
-
 	return &deployer{fleetapi: fleetHTTPAPIClient, serviceDefinitionClient: serviceDefinitionClient}, nil
 }
 
@@ -72,7 +71,7 @@ func (d *deployer) deployAll() error {
 	if d.unitCache == nil {
 		uc, err := d.buildUnitCache()
 		if err != nil {
-			log.Printf("Cannot build unit cache, aborting run: [%v]", err)
+			log.Printf("ERROR Cannot build unit cache, aborting run: [%v]", err)
 			return err
 		}
 		d.unitCache = uc
@@ -394,7 +393,6 @@ func (d *deployer) waitForUnitToLaunch(unitName string) {
 	}
 }
 
-//only name and desireState of the units are used
 func (d *deployer) buildCurrentUnits() (map[string]*schema.Unit, error) {
 	all, err := d.fleetapi.Units()
 	if err != nil {
