@@ -22,6 +22,10 @@ func (hsdc *httpServiceDefinitionClient) servicesDefinition() (services, error) 
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		return services{}, fmt.Errorf("Requesting services.yaml file returned %v HTTP status\n", resp.Status)
+	}
+
 	serviceYaml, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		panic(err)
@@ -39,6 +43,10 @@ func (hsdc *httpServiceDefinitionClient) serviceFile(service service) ([]byte, e
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Requesting service file %v returned %v HTTP status\n", service.Name, resp.Status)
+	}
 
 	serviceTemplate, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
