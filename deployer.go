@@ -34,7 +34,7 @@ func newDeployer() (*deployer, error) {
 	if err != nil {
 		return &deployer{}, err
 	}
-	httpClient := &http.Client{}
+	httpClient := &http.Client{Transport: &http.Transport{MaxIdleConnsPerHost: 100}}
 
 	if *socksProxy != "" {
 		log.Printf("using proxy %s\n", *socksProxy)
@@ -50,6 +50,7 @@ func newDeployer() (*deployer, error) {
 			Proxy:               http.ProxyFromEnvironment,
 			Dial:                dialer.Dial,
 			TLSHandshakeTimeout: 10 * time.Second,
+			MaxIdleConnsPerHost: 100,
 		}
 	}
 
