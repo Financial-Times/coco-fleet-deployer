@@ -34,9 +34,10 @@ type serviceDefinitionClient interface {
 	serviceFile(service service) ([]byte, error)
 }
 
-type zddInfo struct {
-	unit  *schema.Unit
-	count int
+type serviceGroup struct {
+	serviceNodes []*schema.Unit
+	sidekicks    []*schema.Unit
+	isZDD        bool
 }
 
 func main() {
@@ -50,6 +51,7 @@ func main() {
 	}
 	d, err := newDeployer()
 	if err != nil {
+		log.Printf("ERROR Error creating new deployer: [%s]", err.Error())
 		panic(err)
 	}
 
