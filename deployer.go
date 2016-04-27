@@ -85,11 +85,6 @@ func (d *deployer) deployAll() error {
 	d.updateServiceGroupsSKsSequentially(toUpdateSKSequentially)
 	d.deleteServiceGroups(toDelete)
 
-	toLaunch := mergeMaps(toCreate, toUpdateRegular, toUpdateSKRegular)
-	err = d.launchAll(toLaunch)
-	if err != nil {
-		log.Printf("ERROR Cannot launch all services: [%v]", err)
-	}
 	return nil
 }
 
@@ -167,6 +162,7 @@ func (d *deployer) createServiceGroups(serviceGroups map[string]serviceGroup) {
 			d.fleetapi.CreateUnit(u)
 		}
 	}
+	d.launch(serviceGroups)
 }
 
 func (d *deployer) updateServiceGroupsSKsOnly(serviceGroups map[string]serviceGroup) {
@@ -175,6 +171,7 @@ func (d *deployer) updateServiceGroupsSKsOnly(serviceGroups map[string]serviceGr
 			d.updateUnit(u)
 		}
 	}
+	d.launch(serviceGroups)
 }
 
 func (d *deployer) updateServiceGroupsNormally(serviceGroups map[string]serviceGroup) {
@@ -186,6 +183,7 @@ func (d *deployer) updateServiceGroupsNormally(serviceGroups map[string]serviceG
 			d.updateUnit(u)
 		}
 	}
+	d.launch(serviceGroups)
 }
 
 func (d *deployer) updateServiceGroupsSequentially(serviceGroups map[string]serviceGroup) {
@@ -359,7 +357,7 @@ func (d *deployer) buildCurrentUnits() (map[string]*schema.Unit, error) {
 	return units, nil
 }
 
-func (d *deployer) launchAll(serviceGroups map[string]serviceGroup) error {
+func (d *deployer) launch(serviceGroups map[string]serviceGroup) error {
 	currentUnits, err := d.buildCurrentUnits()
 	if err != nil {
 		log.Printf("Error building current Units: [%s]", err.Error())
@@ -472,16 +470,6 @@ func buildUnit(name string, uf *unit.UnitFile, desiredState string) *schema.Unit
 		Options:      schema.MapUnitFileToSchemaUnitOptions(uf),
 		DesiredState: desiredState,
 	}
-}
-
-func mergeMaps(maps ...map[string]serviceGroup) map[string]serviceGroup {
-	merged := make(map[string]serviceGroup)
-	for _, sgMap := range maps {
-		for k, v := range sgMap {
-			merged[k] = v
-		}
-	}
-	return merged
 }
 
 func purgeProcessed(wanted map[string]serviceGroup, processed map[string]serviceGroup) {
