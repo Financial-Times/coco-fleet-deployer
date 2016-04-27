@@ -106,10 +106,7 @@ func (d *deployer) deployAll() error {
 
 func (d *deployer) updateCache(serviceGroups map[string]serviceGroup) {
 	for _, sg := range serviceGroups {
-		for _, u := range sg.serviceNodes {
-			d.unitCache[u.Name] = getUnitHash(u)
-		}
-		for _, u := range sg.sidekicks {
+		for _, u := range sg.getUnits() {
 			d.unitCache[u.Name] = getUnitHash(u)
 		}
 	}
@@ -117,10 +114,7 @@ func (d *deployer) updateCache(serviceGroups map[string]serviceGroup) {
 
 func (d *deployer) removeFromCache(serviceGroups map[string]serviceGroup) {
 	for _, sg := range serviceGroups {
-		for _, u := range sg.serviceNodes {
-			delete(d.unitCache, u.Name)
-		}
-		for _, u := range sg.sidekicks {
+		for _, u := range sg.getUnits() {
 			delete(d.unitCache, u.Name)
 		}
 	}
@@ -206,10 +200,7 @@ func (d *deployer) identifyDeletedServiceGroups(wantedServiceGroups map[string]s
 func (d *deployer) createServiceGroups(serviceGroups map[string]serviceGroup) {
 	for sgName, sg := range serviceGroups {
 		log.Printf("INFO Creating SG [%s].", sgName)
-		for _, u := range sg.serviceNodes {
-			d.fleetapi.CreateUnit(u)
-		}
-		for _, u := range sg.sidekicks {
+		for _, u := range sg.getUnits() {
 			d.fleetapi.CreateUnit(u)
 		}
 	}
@@ -227,10 +218,7 @@ func (d *deployer) updateServiceGroupsSKsOnly(serviceGroups map[string]serviceGr
 
 func (d *deployer) updateServiceGroupsNormally(serviceGroups map[string]serviceGroup) {
 	for _, sg := range serviceGroups {
-		for _, u := range sg.serviceNodes {
-			d.updateUnit(u)
-		}
-		for _, u := range sg.sidekicks {
+		for _, u := range sg.getUnits() {
 			d.updateUnit(u)
 		}
 	}
@@ -251,10 +239,7 @@ func (d *deployer) updateServiceGroupsSKsSequentially(serviceGroups map[string]s
 
 func (d *deployer) deleteServiceGroups(serviceGroups map[string]serviceGroup) {
 	for _, sg := range serviceGroups {
-		for _, u := range sg.serviceNodes {
-			d.fleetapi.DestroyUnit(u.Name)
-		}
-		for _, u := range sg.sidekicks {
+		for _, u := range sg.getUnits() {
 			d.fleetapi.DestroyUnit(u.Name)
 		}
 	}
@@ -415,10 +400,7 @@ func (d *deployer) launch(serviceGroups map[string]serviceGroup) error {
 		return err
 	}
 	for _, sg := range serviceGroups {
-		for _, u := range sg.serviceNodes {
-			d.launchUnit(u, currentUnits)
-		}
-		for _, u := range sg.sidekicks {
+		for _, u := range sg.getUnits() {
 			d.launchUnit(u, currentUnits)
 		}
 	}
@@ -556,4 +538,15 @@ func mergeMaps(maps ...map[string]serviceGroup) map[string]serviceGroup {
 		}
 	}
 	return merged
+}
+
+func (sg *serviceGroup) getUnits() []*schema.Unit {
+	units := []*schema.Unit{}
+	for _, u := range sg.serviceNodes {
+		units = append(units, u)
+	}
+	for _, u := range sg.sidekicks {
+		units = append(units, u)
+	}
+	return units
 }
