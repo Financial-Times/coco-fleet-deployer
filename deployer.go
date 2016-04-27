@@ -35,7 +35,7 @@ func newDeployer() (*deployer, error) {
 	if err != nil {
 		return &deployer{}, err
 	}
-	httpClient := &http.Client{}
+	httpClient := &http.Client{Transport: &http.Transport{MaxIdleConnsPerHost: 100}}
 
 	if *socksProxy != "" {
 		log.Printf("using proxy %s\n", *socksProxy)
@@ -51,6 +51,7 @@ func newDeployer() (*deployer, error) {
 			Proxy:               http.ProxyFromEnvironment,
 			Dial:                dialer.Dial,
 			TLSHandshakeTimeout: 10 * time.Second,
+			MaxIdleConnsPerHost: 100,
 		}
 	}
 
@@ -63,7 +64,10 @@ func newDeployer() (*deployer, error) {
 		log.Println("destroy not enabled (use -destroy to enable)")
 		fleetHTTPAPIClient = noDestroyFleetAPI{fleetHTTPAPIClient}
 	}
-	serviceDefinitionClient := &httpServiceDefinitionClient{httpClient: &http.Client{}, rootURI: *rootURI}
+	serviceDefinitionClient := &httpServiceDefinitionClient{
+		httpClient: &http.Client{Transport: &http.Transport{MaxIdleConnsPerHost: 100}},
+		rootURI:    *rootURI,
+	}
 	return &deployer{fleetapi: fleetHTTPAPIClient, serviceDefinitionClient: serviceDefinitionClient}, nil
 }
 
@@ -97,11 +101,6 @@ func (d *deployer) deployAll() error {
 	d.updateCache(mergeMaps(toCreate, toUpdateRegular, toUpdateSequentially, toUpdateSKRegular, toUpdateSKSequentially))
 	d.removeFromCache(toDelete)
 
-	toLaunch := mergeMaps(toCreate, toUpdateRegular, toUpdateSKRegular)
-	err = d.launchAll(toLaunch)
-	if err != nil {
-		log.Printf("ERROR Cannot launch all services: [%v]", err)
-	}
 	return nil
 }
 
@@ -214,6 +213,7 @@ func (d *deployer) createServiceGroups(serviceGroups map[string]serviceGroup) {
 			d.fleetapi.CreateUnit(u)
 		}
 	}
+	d.launch(serviceGroups)
 }
 
 func (d *deployer) updateServiceGroupsSKsOnly(serviceGroups map[string]serviceGroup) {
@@ -222,6 +222,7 @@ func (d *deployer) updateServiceGroupsSKsOnly(serviceGroups map[string]serviceGr
 			d.updateUnit(u)
 		}
 	}
+	d.launch(serviceGroups)
 }
 
 func (d *deployer) updateServiceGroupsNormally(serviceGroups map[string]serviceGroup) {
@@ -233,6 +234,7 @@ func (d *deployer) updateServiceGroupsNormally(serviceGroups map[string]serviceG
 			d.updateUnit(u)
 		}
 	}
+	d.launch(serviceGroups)
 }
 
 func (d *deployer) updateServiceGroupsSequentially(serviceGroups map[string]serviceGroup) {
@@ -406,7 +408,7 @@ func (d *deployer) buildCurrentUnits() (map[string]*schema.Unit, error) {
 	return units, nil
 }
 
-func (d *deployer) launchAll(serviceGroups map[string]serviceGroup) error {
+func (d *deployer) launch(serviceGroups map[string]serviceGroup) error {
 	currentUnits, err := d.buildCurrentUnits()
 	if err != nil {
 		log.Printf("Error building current Units: [%s]", err.Error())
@@ -510,16 +512,6 @@ func buildUnit(name string, uf *unit.UnitFile, desiredState string) *schema.Unit
 	}
 }
 
-func mergeMaps(maps ...map[string]serviceGroup) map[string]serviceGroup {
-	merged := make(map[string]serviceGroup)
-	for _, sgMap := range maps {
-		for k, v := range sgMap {
-			merged[k] = v
-		}
-	}
-	return merged
-}
-
 func purgeProcessed(wanted map[string]serviceGroup, processed map[string]serviceGroup) {
 	for key := range processed {
 		delete(wanted, key)
@@ -554,4 +546,14 @@ func getUnitHash(unit *schema.Unit) unit.Hash {
 		option.Value = whitespaceMatcher.ReplaceAllString(option.Value, " ")
 	}
 	return unitFile.Hash()
+}
+
+func mergeMaps(maps ...map[string]serviceGroup) map[string]serviceGroup {
+	merged := make(map[string]serviceGroup)
+	for _, sgMap := range maps {
+		for k, v := range sgMap {
+			merged[k] = v
+		}
+	}
+	return merged
 }
