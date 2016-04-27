@@ -63,7 +63,10 @@ func newDeployer() (*deployer, error) {
 		log.Println("destroy not enabled (use -destroy to enable)")
 		fleetHTTPAPIClient = noDestroyFleetAPI{fleetHTTPAPIClient}
 	}
-	serviceDefinitionClient := &httpServiceDefinitionClient{httpClient: &http.Client{}, rootURI: *rootURI}
+	serviceDefinitionClient := &httpServiceDefinitionClient{
+		httpClient: &http.Client{Transport: &http.Transport{MaxIdleConnsPerHost: 100}},
+		rootURI:    *rootURI,
+	}
 	return &deployer{fleetapi: fleetHTTPAPIClient, serviceDefinitionClient: serviceDefinitionClient}, nil
 }
 
