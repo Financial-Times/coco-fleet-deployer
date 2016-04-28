@@ -136,8 +136,17 @@ func (d *deployer) buildUnitCache() (map[string]unit.Hash, error) {
 func (d *deployer) identifyNewServiceGroups(serviceGroups map[string]serviceGroup) map[string]serviceGroup {
 	newServiceGroups := make(map[string]serviceGroup)
 	for name, sg := range serviceGroups {
-		log.Printf("SG name: [%s]",name)
-		if d.isNewUnit(sg.serviceNodes[0]) {
+		var unitToCheck *schema.Unit
+		if len(sg.serviceNodes) > 0 {
+			unitToCheck = sg.serviceNodes[0]
+
+		} else if len(sg.sidekicks) > 0 {
+			unitToCheck = sg.sidekicks[0]
+		} else {
+			log.Printf("ERROR invalid service group: [%v]", sg)
+			continue
+		}
+		if d.isNewUnit(unitToCheck) {
 			newServiceGroups[name] = sg
 		}
 	}
@@ -151,26 +160,26 @@ func (d *deployer) identifyUpdatedServiceGroups(serviceGroups map[string]service
 	skUpdatedSequential := make(map[string]serviceGroup)
 
 	for name, sg := range serviceGroups {
-		if d.isUpdatedUnit(sg.serviceNodes[0]) {
-			if sg.isZDD {
-				updatedSequential[name] = sg
-			} else {
-				updatedRegular[name] = sg
+		if len(sg.serviceNodes) > 0 {
+			if d.isUpdatedUnit(sg.serviceNodes[0]) {
+				if sg.isZDD {
+					updatedSequential[name] = sg
+				} else {
+					updatedRegular[name] = sg
+				}
+				continue
 			}
-			continue
-		}
-
-		if len(sg.sidekicks) == 0 {
-			continue
-		}
-
-		if d.isUpdatedUnit(sg.sidekicks[0]) {
-			if sg.isZDD {
-				skUpdatedSequential[name] = sg
-			} else {
-				skUpdatedRegular[name] = sg
+		} else if len(sg.sidekicks) > 0 {
+			if d.isUpdatedUnit(sg.sidekicks[0]) {
+				if sg.isZDD {
+					skUpdatedSequential[name] = sg
+				} else {
+					skUpdatedRegular[name] = sg
+				}
+				continue
 			}
-			continue
+		} else {
+			log.Printf("ERROR invalid service group: [%v]", sg)
 		}
 	}
 	return updatedRegular, skUpdatedRegular, updatedSequential, skUpdatedSequential
@@ -265,17 +274,22 @@ func (d *deployer) buildWantedUnits() (map[string]serviceGroup, error) {
 			log.Printf("WARNING service file %s is incorrect: %v [SKIPPING]", srv.Name, err)
 			continue
 		}
-
 		serviceName := getServiceName(srv.Name)
 		isSidekick := strings.Contains(srv.Name, "sidekick")
 
 		if srv.Count == 0 && !strings.Contains(srv.Name, "@") {
 			u := buildUnit(srv.Name, uf, srv.DesiredState)
+			if len(u.Options) == 0 {
+				return nil, fmt.Errorf("ERROR Invalid unit: [%v]", u)
+			}
 			wantedUnits = updateServiceGroupMap(u, serviceName, isSidekick, wantedUnits)
 		} else if srv.Count > 0 && strings.Contains(srv.Name, "@") {
 			for i := 0; i < srv.Count; i++ {
 				nodeName := strings.Replace(srv.Name, "@", fmt.Sprintf("@%d", i+1), -1)
 				u := buildUnit(nodeName, uf, srv.DesiredState)
+				if len(u.Options) == 0 {
+					return nil, fmt.Errorf("ERROR Invalid unit: [%v]", u)
+				}
 				wantedUnits = updateServiceGroupMap(u, serviceName, isSidekick, wantedUnits)
 
 				if srv.SequentialDeployment {
@@ -287,6 +301,9 @@ func (d *deployer) buildWantedUnits() (map[string]serviceGroup, error) {
 		} else {
 			log.Printf("WARNING skipping service: %s, incorrect service definition", srv.Name)
 		}
+	}
+	if len(wantedUnits) == 0 {
+		return nil, fmt.Errorf("ERROR Wanted units list is empty, aborting so we don't delete all services.")
 	}
 	return wantedUnits, nil
 }
