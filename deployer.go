@@ -136,6 +136,7 @@ func (d *deployer) buildUnitCache() (map[string]unit.Hash, error) {
 func (d *deployer) identifyNewServiceGroups(serviceGroups map[string]serviceGroup) map[string]serviceGroup {
 	newServiceGroups := make(map[string]serviceGroup)
 	for name, sg := range serviceGroups {
+		log.Printf("SG name: [%s]",name)
 		if d.isNewUnit(sg.serviceNodes[0]) {
 			newServiceGroups[name] = sg
 		}
