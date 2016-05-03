@@ -169,7 +169,8 @@ func (d *deployer) identifyUpdatedServiceGroups(serviceGroups map[string]service
 				}
 				continue
 			}
-		} else if len(sg.sidekicks) > 0 {
+		} 
+		if len(sg.sidekicks) > 0 {
 			if d.isUpdatedUnit(sg.sidekicks[0]) {
 				if sg.isZDD {
 					skUpdatedSequential[name] = sg
@@ -178,9 +179,7 @@ func (d *deployer) identifyUpdatedServiceGroups(serviceGroups map[string]service
 				}
 				continue
 			}
-		} else {
-			log.Printf("ERROR invalid service group: [%v]", sg)
-		}
+		} 
 	}
 	return updatedRegular, skUpdatedRegular, updatedSequential, skUpdatedSequential
 }
@@ -304,6 +303,11 @@ func (d *deployer) buildWantedUnits() (map[string]serviceGroup, error) {
 	}
 	if len(wantedUnits) == 0 {
 		return nil, fmt.Errorf("ERROR Wanted units list is empty, aborting so we don't delete all services.")
+	}
+	for _,sg := range wantedUnits{
+		if len(sg.serviceNodes) == 0 && len(sg.sidekicks) == 0{
+			return nil, fmt.Errorf("ERROR Service group empty, aborting.")
+		}
 	}
 	return wantedUnits, nil
 }
