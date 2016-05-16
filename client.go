@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v2"
 )
@@ -16,7 +17,7 @@ type httpServiceDefinitionClient struct {
 }
 
 func (hsdc *httpServiceDefinitionClient) servicesDefinition() (services, error) {
-	resp, err := hsdc.httpClient.Get(hsdc.rootURI + "services.yaml")
+	resp, err := hsdc.httpClient.Get(fmt.Sprintf("%vservices.yaml?%v", hsdc.rootURI, time.Now().Format(time.RFC3339)))
 	if err != nil {
 		return services{}, err
 	}
@@ -64,11 +65,11 @@ func renderServiceDefinitionYaml(serviceYaml []byte) (services services, err err
 
 func buildServiceFileURI(service service, rootURI string) (string, error) {
 	if strings.HasPrefix(service.URI, "http") == true {
-		return service.URI, nil
+		return fmt.Sprintf("%v?%v", service.URI, time.Now().Format(time.RFC3339)), nil
 	}
 	if rootURI == "" {
 		return "", errors.New("WARNING Service uri isn't absolute and rootURI not specified")
 	}
-	uri := fmt.Sprintf("%s%s", rootURI, service.Name)
+	uri := fmt.Sprintf("%s%s?%v", rootURI, service.Name, time.Now().Format(time.RFC3339))
 	return uri, nil
 }
