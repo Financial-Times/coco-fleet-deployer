@@ -21,6 +21,7 @@ type deployer struct {
 	fleetapi                client.API
 	serviceDefinitionClient serviceDefinitionClient
 	unitCache               map[string]unit.Hash
+	isDebug                 bool
 }
 
 const launchedState = "launched"
@@ -68,10 +69,13 @@ func newDeployer() (*deployer, error) {
 		httpClient: &http.Client{Transport: &http.Transport{MaxIdleConnsPerHost: 100}},
 		rootURI:    *rootURI,
 	}
-	return &deployer{fleetapi: fleetHTTPAPIClient, serviceDefinitionClient: serviceDefinitionClient}, nil
+	return &deployer{fleetapi: fleetHTTPAPIClient, serviceDefinitionClient: serviceDefinitionClient, isDebug: *isDebug}, nil
 }
 
 func (d *deployer) deployAll() error {
+	if d.isDebug {
+		log.Println("Debug log enabled.")
+	}
 	if d.unitCache == nil {
 		uc, err := d.buildUnitCache()
 		if err != nil {
@@ -169,7 +173,7 @@ func (d *deployer) identifyUpdatedServiceGroups(serviceGroups map[string]service
 				}
 				continue
 			}
-		} 
+		}
 		if len(sg.sidekicks) > 0 {
 			if d.isUpdatedUnit(sg.sidekicks[0]) {
 				if sg.isZDD {
@@ -179,7 +183,7 @@ func (d *deployer) identifyUpdatedServiceGroups(serviceGroups map[string]service
 				}
 				continue
 			}
-		} 
+		}
 	}
 	return updatedRegular, skUpdatedRegular, updatedSequential, skUpdatedSequential
 }
@@ -302,11 +306,11 @@ func (d *deployer) buildWantedUnits() (map[string]serviceGroup, error) {
 		}
 	}
 	if len(wantedUnits) == 0 {
-		return nil, fmt.Errorf("ERROR Wanted units list is empty, aborting so we don't delete all services.")
+		return nil, fmt.Errorf("ERROR Wanted units list is empty, aborting so we don't delete all services")
 	}
-	for _,sg := range wantedUnits{
-		if len(sg.serviceNodes) == 0 && len(sg.sidekicks) == 0{
-			return nil, fmt.Errorf("ERROR Service group empty, aborting.")
+	for _, sg := range wantedUnits {
+		if len(sg.serviceNodes) == 0 && len(sg.sidekicks) == 0 {
+			return nil, fmt.Errorf("ERROR Service group empty, aborting")
 		}
 	}
 	return wantedUnits, nil
