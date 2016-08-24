@@ -14,6 +14,7 @@ var (
 	socksProxy              = flag.String("socksProxy", "", "address of socks proxy, e.g., 127.0.0.1:9050")
 	destroyServiceBlacklist = map[string]struct{}{"deployer.service": struct{}{}, "deployer.timer": struct{}{}}
 	rootURI                 = flag.String("rootURI", "", "Base uri to use when constructing service file URI. Only used if service file URI is relative.")
+	isDebug                 = flag.Bool("isDebug", false, "Enable to show debug logs.")
 )
 
 type services struct {

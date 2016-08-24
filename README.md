@@ -26,6 +26,6 @@ Also supports socks5 proxies, primarily for ease of use via ssh tunnelling durin
 #Run a tunnel
 ssh -Nn -D2323 core@$FLEETCTL_TUNNEL &
 
-#Execute the deployer
+#Execute the deployer 
 coco-fleet-deployer -fleetEndpoint="http://localhost:49153" -rootURI="https://raw.githubusercontent.com/Financial-Times/fleet/master/service-files/" -destroy=true -socksProxy="127.0.0.1:2323"
 ```
