@@ -140,8 +140,8 @@ func (d *deployer) buildUnitCache() (map[string]unit.Hash, map[string]int, error
 	countCache := make(map[string]int)
 	for _, unit := range units {
 		unitCache[unit.Name] = getUnitHash(unit)
-		serviceName := getServiceName(unit.Name)
-		if !strings.Contains(serviceName, "sidekick") {
+		if !strings.Contains(unit.Name, "sidekick") {
+			serviceName := getServiceName(unit.Name)
 			currentCount := countCache[serviceName]
 			countCache[serviceName] = currentCount + 1
 		}
