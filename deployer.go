@@ -14,6 +14,7 @@ import (
 	"github.com/coreos/fleet/client"
 	"github.com/coreos/fleet/schema"
 	"github.com/coreos/fleet/unit"
+	"github.com/kr/pretty"
 	"golang.org/x/net/proxy"
 )
 
@@ -21,6 +22,7 @@ type deployer struct {
 	fleetapi                client.API
 	serviceDefinitionClient serviceDefinitionClient
 	unitCache               map[string]unit.Hash
+	serviceCountCache       map[string]int
 	isDebug                 bool
 }
 
@@ -77,12 +79,16 @@ func (d *deployer) deployAll() error {
 		log.Println("Debug log enabled.")
 	}
 	if d.unitCache == nil {
-		uc, err := d.buildUnitCache()
+		uc, cc, err := d.buildUnitCache()
 		if err != nil {
 			log.Printf("ERROR Cannot build unit cache, aborting run: [%v]", err)
 			return err
 		}
 		d.unitCache = uc
+		if d.isDebug {
+			log.Printf("Count cache: #% v", pretty.Formatter(cc))
+		}
+		d.serviceCountCache = cc
 	}
 
 	wantedServiceGroups, err := d.buildWantedUnits()
@@ -124,17 +130,21 @@ func (d *deployer) removeFromCache(serviceGroups map[string]serviceGroup) {
 	}
 }
 
-func (d *deployer) buildUnitCache() (map[string]unit.Hash, error) {
+func (d *deployer) buildUnitCache() (map[string]unit.Hash, map[string]int, error) {
 	units, err := d.fleetapi.Units()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	unitCache := make(map[string]unit.Hash)
+	countCache := make(map[string]int)
 	for _, unit := range units {
 		unitCache[unit.Name] = getUnitHash(unit)
+		serviceName := getServiceName(unit.Name)
+		currentCount := countCache[serviceName]
+		countCache[serviceName] = currentCount + 1
 	}
-	return unitCache, nil
+	return unitCache, countCache, nil
 }
 
 func (d *deployer) identifyNewServiceGroups(serviceGroups map[string]serviceGroup) map[string]serviceGroup {

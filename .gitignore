@@ -2,3 +2,4 @@ coco-fleet-deployer
 *.exe
 tags
 .idea/
+.vscode/
