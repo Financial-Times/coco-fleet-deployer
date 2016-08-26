@@ -78,6 +78,8 @@ func (d *deployer) deployAll() error {
 	if d.isDebug {
 		log.Println("Debug log enabled.")
 	}
+	// disable cache
+	d.unitCache = nil
 	if d.unitCache == nil {
 		uc, cc, err := d.buildUnitCache()
 		if err != nil {
@@ -98,10 +100,12 @@ func (d *deployer) deployAll() error {
 
 	toDelete := d.identifyDeletedServiceGroups(wantedServiceGroups)
 	toCreate := d.identifyNewServiceGroups(wantedServiceGroups)
+	toCreateMissingNodes := d.identifyNewNodes(wantedServiceGroups)
 	purgeProcessed(wantedServiceGroups, toCreate)
 	toUpdateRegular, toUpdateSKRegular, toUpdateSequentially, toUpdateSKSequentially := d.identifyUpdatedServiceGroups(wantedServiceGroups)
 
 	d.createServiceGroups(toCreate)
+	d.createMissingNodes(toCreateMissingNodes)
 	d.updateServiceGroupsNormally(toUpdateRegular)
 	d.updateServiceGroupsSequentially(toUpdateSequentially)
 	d.updateServiceGroupsSKsOnly(toUpdateSKRegular)
@@ -169,6 +173,19 @@ func (d *deployer) identifyNewServiceGroups(serviceGroups map[string]serviceGrou
 	return newServiceGroups
 }
 
+func (d *deployer) identifyNewNodes(serviceGroups map[string]serviceGroup) map[string]serviceGroup {
+	newServiceGroups := make(map[string]serviceGroup)
+	for name, sg := range serviceGroups {
+		if len(sg.serviceNodes) > d.serviceCountCache[name] {
+			if d.isDebug {
+				log.Printf("Identified the %s servicegroup as having too few nodes!", name)
+			}
+			newServiceGroups[name] = sg
+		}
+	}
+	return newServiceGroups
+}
+
 func (d *deployer) identifyUpdatedServiceGroups(serviceGroups map[string]serviceGroup) (map[string]serviceGroup, map[string]serviceGroup, map[string]serviceGroup, map[string]serviceGroup) {
 	updatedRegular := make(map[string]serviceGroup)
 	skUpdatedRegular := make(map[string]serviceGroup)
@@ -230,6 +247,20 @@ func (d *deployer) createServiceGroups(serviceGroups map[string]serviceGroup) {
 		}
 	}
 	d.launch(serviceGroups)
+}
+
+func (d *deployer) createMissingNodes(serviceGroups map[string]serviceGroup) {
+	for _, sg := range serviceGroups {
+		for _, u := range sg.getUnits() {
+			if _, ok := d.unitCache[u.Name]; !ok {
+				if d.isDebug {
+					log.Printf("Unit %s is a new one.", u.Name)
+				}
+				d.fleetapi.CreateUnit(u)
+				d.launchNewUnit(u)
+			}
+		}
+	}
 }
 
 func (d *deployer) updateServiceGroupsSKsOnly(serviceGroups map[string]serviceGroup) {
@@ -504,6 +535,16 @@ func (d *deployer) launchUnit(u *schema.Unit, currentUnits map[string]*schema.Un
 	} else {
 		d.fleetapi.SetUnitTargetState(u.Name, u.DesiredState)
 	}
+}
+
+func (d *deployer) launchNewUnit(u *schema.Unit) {
+	if d.isDebug {
+		log.Printf("Launching unit %s", u.Name)
+	}
+	if u.DesiredState == "" {
+		u.DesiredState = launchedState
+	}
+	d.fleetapi.SetUnitTargetState(u.Name, u.DesiredState)
 }
 
 func updateServiceGroupMap(u *schema.Unit, serviceName string, isSidekick bool, serviceGroups map[string]serviceGroup) map[string]serviceGroup {
