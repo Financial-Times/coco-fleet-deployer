@@ -99,11 +99,13 @@ func (d *deployer) deployAll() error {
 	toDelete := d.identifyDeletedServiceGroups(wantedServiceGroups)
 	toCreate := d.identifyNewServiceGroups(wantedServiceGroups)
 	toCreateMissingNodes := d.identifyNewNodes(wantedServiceGroups)
+	toDeleteExtraNodes := d.identifyExtraNodes(wantedServiceGroups)
 	purgeProcessed(wantedServiceGroups, toCreate)
 	toUpdateRegular, toUpdateSKRegular, toUpdateSequentially, toUpdateSKSequentially := d.identifyUpdatedServiceGroups(wantedServiceGroups)
 
 	d.createServiceGroups(toCreate)
 	d.createMissingNodes(toCreateMissingNodes)
+	d.deleteExtraNodes(toDeleteExtraNodes)
 	d.updateServiceGroupsNormally(toUpdateRegular)
 	d.updateServiceGroupsSequentially(toUpdateSequentially)
 	d.updateServiceGroupsSKsOnly(toUpdateSKRegular)
@@ -177,6 +179,19 @@ func (d *deployer) identifyNewNodes(serviceGroups map[string]serviceGroup) map[s
 		if len(sg.serviceNodes) > d.serviceCountCache[name] {
 			if d.isDebug {
 				log.Printf("Identified the %s servicegroup as having too few nodes!", name)
+			}
+			newServiceGroups[name] = sg
+		}
+	}
+	return newServiceGroups
+}
+
+func (d *deployer) identifyExtraNodes(serviceGroups map[string]serviceGroup) map[string]serviceGroup {
+	newServiceGroups := make(map[string]serviceGroup)
+	for name, sg := range serviceGroups {
+		if len(sg.serviceNodes) < d.serviceCountCache[name] {
+			if d.isDebug {
+				log.Printf("Identified the %s servicegroup as having too many nodes!", name)
 			}
 			newServiceGroups[name] = sg
 		}
@@ -258,6 +273,43 @@ func (d *deployer) createMissingNodes(serviceGroups map[string]serviceGroup) {
 				d.launchNewUnit(u)
 			}
 		}
+	}
+}
+
+func (d *deployer) deleteExtraNodes(serviceGroups map[string]serviceGroup) {
+	var currentNodes []string
+	for _, sg := range serviceGroups {
+		serviceName := getServiceName(sg.serviceNodes[0].Name)
+
+		// build the list of current nodes of this SG
+		for k := range d.unitCache {
+			existingServiceName := getServiceName(k)
+			if serviceName == existingServiceName {
+				currentNodes = append(currentNodes, k)
+			}
+		}
+		if d.isDebug {
+			log.Printf("Current nodes for sg %s: %# v", serviceName, pretty.Formatter(currentNodes))
+		}
+		//for each node of the current servicegroup, see if it's in the wanted list
+		for _, currentNode := range currentNodes {
+			isNeeded := false
+			for _, u := range sg.getUnits() {
+				if currentNode == u.Name {
+					isNeeded = true
+					break
+				}
+			}
+			if isNeeded {
+				continue
+			}
+
+			if d.isDebug {
+				log.Printf("Destroying node: %s", currentNode)
+			}
+			d.fleetapi.DestroyUnit(currentNode)
+		}
+
 	}
 }
 
