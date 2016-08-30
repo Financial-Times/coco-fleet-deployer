@@ -115,6 +115,9 @@ func (d *deployer) deployAll() error {
 
 	//invalidate cache
 	if changesDone(toCreate, toCreateMissingNodes, toDeleteExtraNodes, toUpdateRegular, toUpdateSequentially, toUpdateSKRegular, toUpdateSKSequentially, toDelete) {
+		if d.isDebug {
+			log.Printf("Invalidating cache.")
+		}
 		d.unitCache = nil
 	}
 
@@ -211,6 +214,10 @@ func (d *deployer) identifyUpdatedServiceGroups(serviceGroups map[string]service
 	for name, sg := range serviceGroups {
 		if len(sg.serviceNodes) > 0 {
 			if d.isUpdatedUnit(sg.serviceNodes[0]) {
+				if d.isDebug {
+					log.Println("Unit detected as updated!\n\n")
+					log.Printf("Wanted unit options: \n\n #% v \n\n", pretty.Formatter(sg.serviceNodes[0].Options))
+				}
 				if sg.isZDD {
 					updatedSequential[name] = sg
 				} else {
@@ -221,6 +228,10 @@ func (d *deployer) identifyUpdatedServiceGroups(serviceGroups map[string]service
 		}
 		if len(sg.sidekicks) > 0 {
 			if d.isUpdatedUnit(sg.sidekicks[0]) {
+				if d.isDebug {
+					log.Println("Unit detected as updated!\n\n")
+					log.Printf("Wanted unit options: \n\n #% v \n\n", pretty.Formatter(sg.serviceNodes[0].Options))
+				}
 				if sg.isZDD {
 					skUpdatedSequential[name] = sg
 				} else {
