@@ -291,8 +291,8 @@ func (d *deployer) createMissingNodes(serviceGroups map[string]serviceGroup) {
 }
 
 func (d *deployer) deleteExtraNodes(serviceGroups map[string]serviceGroup) {
-	var currentNodes []string
 	for _, sg := range serviceGroups {
+		currentNodes := []string{}
 		serviceName := getServiceName(sg.serviceNodes[0].Name)
 
 		// build the list of current nodes of this SG
