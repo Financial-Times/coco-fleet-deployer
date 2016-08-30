@@ -104,16 +104,16 @@ func (d *deployer) deployAll() error {
 	toUpdateRegular, toUpdateSKRegular, toUpdateSequentially, toUpdateSKSequentially := d.identifyUpdatedServiceGroups(wantedServiceGroups)
 
 	d.createServiceGroups(toCreate)
-	d.createMissingNodes(toCreateMissingNodes)
-	d.deleteExtraNodes(toDeleteExtraNodes)
+	missingNodesCreated := d.createMissingNodes(toCreateMissingNodes)
+	extraNodesDeleted := d.deleteExtraNodes(toDeleteExtraNodes)
 	d.updateServiceGroupsNormally(toUpdateRegular)
 	d.updateServiceGroupsSequentially(toUpdateSequentially)
 	d.updateServiceGroupsSKsOnly(toUpdateSKRegular)
 	d.updateServiceGroupsSKsSequentially(toUpdateSKSequentially)
 	d.deleteServiceGroups(toDelete)
 
-	d.updateCache(mergeMaps(toCreate, toUpdateRegular, toUpdateSequentially, toUpdateSKRegular, toUpdateSKSequentially))
-	d.removeFromCache(toDelete)
+	d.updateCache(mergeMaps(toCreate, toUpdateRegular, toUpdateSequentially, toUpdateSKRegular, toUpdateSKSequentially, missingNodesCreated))
+	d.removeFromCache(mergeMaps(toDelete, extraNodesDeleted))
 
 	return nil
 }
@@ -262,8 +262,10 @@ func (d *deployer) createServiceGroups(serviceGroups map[string]serviceGroup) {
 	d.launch(serviceGroups)
 }
 
-func (d *deployer) createMissingNodes(serviceGroups map[string]serviceGroup) {
-	for _, sg := range serviceGroups {
+func (d *deployer) createMissingNodes(serviceGroups map[string]serviceGroup) map[string]serviceGroup {
+	missingNodes := make(map[string]serviceGroup)
+
+	for serviceName, sg := range serviceGroups {
 		for _, u := range sg.getUnits() {
 			if _, ok := d.unitCache[u.Name]; !ok {
 				if d.isDebug {
@@ -271,12 +273,16 @@ func (d *deployer) createMissingNodes(serviceGroups map[string]serviceGroup) {
 				}
 				d.fleetapi.CreateUnit(u)
 				d.launchNewUnit(u)
+				updateServiceGroupMap(u, serviceName, false, missingNodes)
 			}
 		}
 	}
+	return missingNodes
 }
 
-func (d *deployer) deleteExtraNodes(serviceGroups map[string]serviceGroup) {
+func (d *deployer) deleteExtraNodes(serviceGroups map[string]serviceGroup) map[string]serviceGroup {
+	extraNodes := make(map[string]serviceGroup)
+
 	var currentNodes []string
 	for _, sg := range serviceGroups {
 		serviceName := getServiceName(sg.serviceNodes[0].Name)
@@ -308,9 +314,10 @@ func (d *deployer) deleteExtraNodes(serviceGroups map[string]serviceGroup) {
 				log.Printf("Destroying node: %s", currentNode)
 			}
 			d.fleetapi.DestroyUnit(currentNode)
+			updateServiceGroupMap(&schema.Unit{Name: currentNode}, serviceName, false, extraNodes)
 		}
-
 	}
+	return extraNodes
 }
 
 func (d *deployer) updateServiceGroupsSKsOnly(serviceGroups map[string]serviceGroup) {
