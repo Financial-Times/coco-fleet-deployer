@@ -86,7 +86,8 @@ func (d *deployer) deployAll() error {
 		}
 		d.unitCache = uc
 		if d.isDebug {
-			log.Printf("Count cache: #% v", pretty.Formatter(cc))
+			log.Printf("Count cache:\n #% v \n", pretty.Formatter(cc))
+			log.Printf("Unit cache: \n #% v \n", pretty.Formatter(uc))
 		}
 		d.serviceCountCache = cc
 	}
