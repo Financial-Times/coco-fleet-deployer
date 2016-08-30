@@ -78,8 +78,6 @@ func (d *deployer) deployAll() error {
 	if d.isDebug {
 		log.Println("Debug log enabled.")
 	}
-	// disable cache
-	d.unitCache = nil
 	if d.unitCache == nil {
 		uc, cc, err := d.buildUnitCache()
 		if err != nil {
