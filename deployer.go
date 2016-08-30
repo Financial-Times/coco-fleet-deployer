@@ -86,8 +86,8 @@ func (d *deployer) deployAll() error {
 		}
 		d.unitCache = uc
 		if d.isDebug {
-			log.Printf("Count cache:\n #% v \n", pretty.Formatter(cc))
-			log.Printf("Unit cache: \n #% v \n", pretty.Formatter(uc))
+			log.Printf("Count cache:\n %# v \n", pretty.Formatter(cc))
+			log.Printf("Unit cache: \n %# v \n", pretty.Formatter(uc))
 		}
 		d.serviceCountCache = cc
 	}
@@ -216,7 +216,7 @@ func (d *deployer) identifyUpdatedServiceGroups(serviceGroups map[string]service
 			if d.isUpdatedUnit(sg.serviceNodes[0]) {
 				if d.isDebug {
 					log.Println("Unit detected as updated!\n\n")
-					log.Printf("Wanted unit options: \n\n #% v \n\n", pretty.Formatter(sg.serviceNodes[0].Options))
+					log.Printf("Wanted unit options: \n\n %# v \n\n", pretty.Formatter(sg.serviceNodes[0].Options))
 				}
 				if sg.isZDD {
 					updatedSequential[name] = sg
@@ -230,7 +230,7 @@ func (d *deployer) identifyUpdatedServiceGroups(serviceGroups map[string]service
 			if d.isUpdatedUnit(sg.sidekicks[0]) {
 				if d.isDebug {
 					log.Println("Unit detected as updated!\n\n")
-					log.Printf("Wanted unit options: \n\n #% v \n\n", pretty.Formatter(sg.serviceNodes[0].Options))
+					log.Printf("Wanted unit options: \n\n %# v \n\n", pretty.Formatter(sg.serviceNodes[0].Options))
 				}
 				if sg.isZDD {
 					skUpdatedSequential[name] = sg
