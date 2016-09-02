@@ -22,7 +22,7 @@ type deployer struct {
 	fleetapi                client.API
 	serviceDefinitionClient serviceDefinitionClient
 	unitCache               map[string]unit.Hash
-	serviceCountCache       map[string]int
+	nodeCountCache          map[string]int
 	isDebug                 bool
 }
 
@@ -79,17 +79,16 @@ func (d *deployer) deployAll() error {
 		log.Println("Debug log enabled.")
 	}
 	if d.unitCache == nil {
-		uc, cc, err := d.buildUnitCache()
+		uc, ncc, err := d.buildCaches()
 		if err != nil {
 			log.Printf("ERROR Cannot build unit cache, aborting run: [%v]", err)
 			return err
 		}
 		d.unitCache = uc
 		if d.isDebug {
-			log.Printf("Count cache:\n %# v \n", pretty.Formatter(cc))
-			log.Printf("Unit cache: \n %# v \n", pretty.Formatter(uc))
+			log.Printf("Count cache:\n %# v \n", pretty.Formatter(ncc))
 		}
-		d.serviceCountCache = cc
+		d.nodeCountCache = ncc
 	}
 
 	wantedServiceGroups, err := d.buildWantedUnits()
@@ -99,22 +98,21 @@ func (d *deployer) deployAll() error {
 
 	toDelete := d.identifyDeletedServiceGroups(wantedServiceGroups)
 	toCreate := d.identifyNewServiceGroups(wantedServiceGroups)
-	toCreateMissingNodes := d.identifyNewNodes(wantedServiceGroups)
-	toDeleteExtraNodes := d.identifyExtraNodes(wantedServiceGroups)
+	toCreateNodes := d.identifyNodesToCreate(wantedServiceGroups)
+	toDeleteNodes := d.identifyNodesToDelete(wantedServiceGroups)
 	purgeProcessed(wantedServiceGroups, toCreate)
 	toUpdateRegular, toUpdateSKRegular, toUpdateSequentially, toUpdateSKSequentially := d.identifyUpdatedServiceGroups(wantedServiceGroups)
 
 	d.createServiceGroups(toCreate)
-	d.createMissingNodes(toCreateMissingNodes)
-	d.deleteExtraNodes(toDeleteExtraNodes)
+	d.createNodes(toCreateNodes)
+	d.deleteNodes(toDeleteNodes)
 	d.updateServiceGroupsNormally(toUpdateRegular)
 	d.updateServiceGroupsSequentially(toUpdateSequentially)
 	d.updateServiceGroupsSKsOnly(toUpdateSKRegular)
 	d.updateServiceGroupsSKsSequentially(toUpdateSKSequentially)
 	d.deleteServiceGroups(toDelete)
 
-	//invalidate cache
-	if changesDone(toCreate, toCreateMissingNodes, toDeleteExtraNodes, toUpdateRegular, toUpdateSequentially, toUpdateSKRegular, toUpdateSKSequentially, toDelete) {
+	if changesDone(toCreate, toCreateNodes, toDeleteNodes, toUpdateRegular, toUpdateSequentially, toUpdateSKRegular, toUpdateSKSequentially, toDelete) {
 		if d.isDebug {
 			log.Printf("Invalidating cache.")
 		}
@@ -140,7 +138,7 @@ func (d *deployer) removeFromCache(serviceGroups map[string]serviceGroup) {
 	}
 }
 
-func (d *deployer) buildUnitCache() (map[string]unit.Hash, map[string]int, error) {
+func (d *deployer) buildCaches() (map[string]unit.Hash, map[string]int, error) {
 	units, err := d.fleetapi.Units()
 	if err != nil {
 		return nil, nil, err
@@ -179,30 +177,30 @@ func (d *deployer) identifyNewServiceGroups(serviceGroups map[string]serviceGrou
 	return newServiceGroups
 }
 
-func (d *deployer) identifyNewNodes(serviceGroups map[string]serviceGroup) map[string]serviceGroup {
-	newServiceGroups := make(map[string]serviceGroup)
+func (d *deployer) identifyNodesToCreate(serviceGroups map[string]serviceGroup) map[string]serviceGroup {
+	newNodes := make(map[string]serviceGroup)
 	for name, sg := range serviceGroups {
-		if len(sg.serviceNodes) > d.serviceCountCache[name] {
+		if len(sg.serviceNodes) > d.nodeCountCache[name] {
 			if d.isDebug {
 				log.Printf("Identified the %s servicegroup as having too few nodes!", name)
 			}
-			newServiceGroups[name] = sg
+			newNodes[name] = sg
 		}
 	}
-	return newServiceGroups
+	return newNodes
 }
 
-func (d *deployer) identifyExtraNodes(serviceGroups map[string]serviceGroup) map[string]serviceGroup {
-	newServiceGroups := make(map[string]serviceGroup)
+func (d *deployer) identifyNodesToDelete(serviceGroups map[string]serviceGroup) map[string]serviceGroup {
+	extraNodes := make(map[string]serviceGroup)
 	for name, sg := range serviceGroups {
-		if len(sg.serviceNodes) < d.serviceCountCache[name] {
+		if len(sg.serviceNodes) < d.nodeCountCache[name] {
 			if d.isDebug {
 				log.Printf("Identified the %s servicegroup as having too many nodes!", name)
 			}
-			newServiceGroups[name] = sg
+			extraNodes[name] = sg
 		}
 	}
-	return newServiceGroups
+	return extraNodes
 }
 
 func (d *deployer) identifyUpdatedServiceGroups(serviceGroups map[string]serviceGroup) (map[string]serviceGroup, map[string]serviceGroup, map[string]serviceGroup, map[string]serviceGroup) {
@@ -215,7 +213,7 @@ func (d *deployer) identifyUpdatedServiceGroups(serviceGroups map[string]service
 		if len(sg.serviceNodes) > 0 {
 			if d.isUpdatedUnit(sg.serviceNodes[0]) {
 				if d.isDebug {
-					log.Println("Unit detected as updated!\n\n")
+					log.Printf("Unit %s detected as updated!", sg.serviceNodes[0].Name)
 					log.Printf("Wanted unit options: \n\n %# v \n\n", pretty.Formatter(sg.serviceNodes[0].Options))
 				}
 				if sg.isZDD {
@@ -229,7 +227,7 @@ func (d *deployer) identifyUpdatedServiceGroups(serviceGroups map[string]service
 		if len(sg.sidekicks) > 0 {
 			if d.isUpdatedUnit(sg.sidekicks[0]) {
 				if d.isDebug {
-					log.Println("Unit detected as updated!\n\n")
+					log.Printf("Unit %s detected as updated!", sg.serviceNodes[0].Name)
 					log.Printf("Wanted unit options: \n\n %# v \n\n", pretty.Formatter(sg.serviceNodes[0].Options))
 				}
 				if sg.isZDD {
@@ -276,7 +274,7 @@ func (d *deployer) createServiceGroups(serviceGroups map[string]serviceGroup) {
 	d.launch(serviceGroups)
 }
 
-func (d *deployer) createMissingNodes(serviceGroups map[string]serviceGroup) {
+func (d *deployer) createNodes(serviceGroups map[string]serviceGroup) {
 	for _, sg := range serviceGroups {
 		for _, u := range sg.getUnits() {
 			if _, ok := d.unitCache[u.Name]; !ok {
@@ -290,7 +288,7 @@ func (d *deployer) createMissingNodes(serviceGroups map[string]serviceGroup) {
 	}
 }
 
-func (d *deployer) deleteExtraNodes(serviceGroups map[string]serviceGroup) {
+func (d *deployer) deleteNodes(serviceGroups map[string]serviceGroup) {
 	for _, sg := range serviceGroups {
 		currentNodes := []string{}
 		serviceName := getServiceName(sg.serviceNodes[0].Name)
@@ -316,10 +314,6 @@ func (d *deployer) deleteExtraNodes(serviceGroups map[string]serviceGroup) {
 			}
 			if isNeeded {
 				continue
-			}
-
-			if d.isDebug {
-				log.Printf("Destroying node: %s", currentNode)
 			}
 			d.fleetapi.DestroyUnit(currentNode)
 		}
