@@ -98,21 +98,21 @@ func (d *deployer) deployAll() error {
 
 	toDelete := d.identifyDeletedServiceGroups(wantedServiceGroups)
 	toCreate := d.identifyNewServiceGroups(wantedServiceGroups)
-	toCreateNodes := d.identifyNodesToCreate(wantedServiceGroups)
-	toDeleteNodes := d.identifyNodesToDelete(wantedServiceGroups)
+	sgsWithNodesAdded := d.identifySGsWithNodesAdded(wantedServiceGroups)
+	sgsWithNodesRemoved := d.identifySGsWithNodesRemoved(wantedServiceGroups)
 	purgeProcessed(wantedServiceGroups, toCreate)
 	toUpdateRegular, toUpdateSKRegular, toUpdateSequentially, toUpdateSKSequentially := d.identifyUpdatedServiceGroups(wantedServiceGroups)
 
 	d.createServiceGroups(toCreate)
-	d.createNodes(toCreateNodes)
-	d.deleteNodes(toDeleteNodes)
+	d.createNodes(sgsWithNodesAdded)
+	d.deleteNodes(sgsWithNodesRemoved)
 	d.updateServiceGroupsNormally(toUpdateRegular)
 	d.updateServiceGroupsSequentially(toUpdateSequentially)
 	d.updateServiceGroupsSKsOnly(toUpdateSKRegular)
 	d.updateServiceGroupsSKsSequentially(toUpdateSKSequentially)
 	d.deleteServiceGroups(toDelete)
 
-	if changesDone(toCreate, toCreateNodes, toDeleteNodes, toUpdateRegular, toUpdateSequentially, toUpdateSKRegular, toUpdateSKSequentially, toDelete) {
+	if changesDone(toCreate, sgsWithNodesAdded, sgsWithNodesRemoved, toUpdateRegular, toUpdateSequentially, toUpdateSKRegular, toUpdateSKSequentially, toDelete) {
 		if d.isDebug {
 			log.Printf("Invalidating cache.")
 		}
@@ -177,12 +177,12 @@ func (d *deployer) identifyNewServiceGroups(serviceGroups map[string]serviceGrou
 	return newServiceGroups
 }
 
-func (d *deployer) identifyNodesToCreate(serviceGroups map[string]serviceGroup) map[string]serviceGroup {
+func (d *deployer) identifySGsWithNodesAdded(serviceGroups map[string]serviceGroup) map[string]serviceGroup {
 	newNodes := make(map[string]serviceGroup)
 	for name, sg := range serviceGroups {
 		if len(sg.serviceNodes) > d.nodeCountCache[name] {
 			if d.isDebug {
-				log.Printf("Identified the %s servicegroup as having too few nodes!", name)
+				log.Printf("Servicegroup %s had nodes added in servicefile.", name)
 			}
 			newNodes[name] = sg
 		}
@@ -190,12 +190,12 @@ func (d *deployer) identifyNodesToCreate(serviceGroups map[string]serviceGroup) 
 	return newNodes
 }
 
-func (d *deployer) identifyNodesToDelete(serviceGroups map[string]serviceGroup) map[string]serviceGroup {
+func (d *deployer) identifySGsWithNodesRemoved(serviceGroups map[string]serviceGroup) map[string]serviceGroup {
 	extraNodes := make(map[string]serviceGroup)
 	for name, sg := range serviceGroups {
 		if len(sg.serviceNodes) < d.nodeCountCache[name] {
 			if d.isDebug {
-				log.Printf("Identified the %s servicegroup as having too many nodes!", name)
+				log.Printf("Servicegroup %s had nodes removed in servicefile.", name)
 			}
 			extraNodes[name] = sg
 		}
@@ -279,7 +279,7 @@ func (d *deployer) createNodes(serviceGroups map[string]serviceGroup) {
 		for _, u := range sg.getUnits() {
 			if _, ok := d.unitCache[u.Name]; !ok {
 				if d.isDebug {
-					log.Printf("Unit %s is a new one.", u.Name)
+					log.Printf("Unit %s is a new node for an existing service group.", u.Name)
 				}
 				d.fleetapi.CreateUnit(u)
 				d.launchNewUnit(u)
