@@ -11,9 +11,11 @@ import (
 
 	"regexp"
 
+	etcdClient "github.com/coreos/etcd/client"
 	"github.com/coreos/fleet/client"
 	"github.com/coreos/fleet/schema"
 	"github.com/coreos/fleet/unit"
+	"golang.org/x/net/context"
 	"golang.org/x/net/proxy"
 )
 
@@ -22,6 +24,8 @@ type deployer struct {
 	serviceDefinitionClient serviceDefinitionClient
 	unitCache               map[string]unit.Hash
 	isDebug                 bool
+	etcdapi                 etcdClient.KeysAPI
+	httpClient              *http.Client
 }
 
 const launchedState = "launched"
@@ -69,7 +73,19 @@ func newDeployer() (*deployer, error) {
 		httpClient: &http.Client{Transport: &http.Transport{MaxIdleConnsPerHost: 100}},
 		rootURI:    *rootURI,
 	}
-	return &deployer{fleetapi: fleetHTTPAPIClient, serviceDefinitionClient: serviceDefinitionClient, isDebug: *isDebug}, nil
+
+	etcdClientCfg := etcdClient.Config{
+		Endpoints:               []string{*etcdURL},
+		Transport:               etcdClient.DefaultTransport,
+		HeaderTimeoutPerRequest: time.Second * 5,
+	}
+
+	c, err := etcdClient.New(etcdClientCfg)
+	if err != nil {
+		return &deployer{}, err
+	}
+	etcdapi := etcdClient.NewKeysAPI(c)
+	return &deployer{fleetapi: fleetHTTPAPIClient, serviceDefinitionClient: serviceDefinitionClient, isDebug: *isDebug, etcdapi: etcdapi, httpClient: httpClient}, nil
 }
 
 func (d *deployer) deployAll() error {
@@ -347,6 +363,34 @@ func (d *deployer) performSequentialDeployment(sg serviceGroup) {
 		}
 		if (i + 1) == len(sg.serviceNodes) { //this is the last node, we're done
 			break
+		}
+
+		// read from etcd entry for app
+		//TODO context with timeout
+		etcdResp, err := d.etcdapi.Get(context.Background(), fmt.Sprintf("/ft/services/%s/healthcheck", getServiceName(u.Name)), nil)
+		if err != nil {
+			//TODO default to wait for unit
+			log.Printf("Error while getting etcd key for app from %s: %v", fmt.Sprintf("/ft/services/%s/healthcheck", getServiceName(u.Name)), err.Error())
+		}
+		log.Printf("HC node value: %s", etcdResp.Node.Value)
+		if etcdResp.Node.Value == "true" {
+			etcdResp, err := d.etcdapi.Get(context.Background(), "/ft/config/environment_tag", nil)
+			if err != nil {
+				//TODO default to wait for unit
+				log.Printf("Error while getting envrionment from %s: %v", "/ft/config/environment_tag", err.Error())
+			}
+			env := etcdResp.Node.Value
+			//TODO check gtg Endpoints
+			gtgResp, err := d.httpClient.Get(fmt.Sprintf("https://%s-up-coco.ft.com/__%s/__gtg", env, getServiceName(u.Name)))
+			if err != nil {
+				log.Printf("Error calling %s: %v", fmt.Sprintf("https://%s-up-coco.ft.com/__%s/__gtg", env, getServiceName(u.Name)), err.Error())
+			}
+			gtgResp.Body.Close()
+
+			if gtgResp.StatusCode != http.StatusOK {
+				log.Printf("App is not up yet, waiting more!")
+			}
+			return
 		}
 
 		var unitToWaitOn string
