@@ -16,6 +16,7 @@ var (
 	rootURI                 = flag.String("rootURI", "", "Base uri to use when constructing service file URI. Only used if service file URI is relative.")
 	isDebug                 = flag.Bool("isDebug", false, "Enable to show debug logs.")
 	etcdURL                 = flag.String("etcd-url", "http://localhost:2379", "etcd URL")
+	gtgURL                  = flag.String("gtg-url", "http://localhost:8080", "gtg URL")
 )
 
 type services struct {

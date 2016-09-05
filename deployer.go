@@ -26,6 +26,7 @@ type deployer struct {
 	isDebug                 bool
 	etcdapi                 etcdClient.KeysAPI
 	httpClient              *http.Client
+	gtgURL                  string
 }
 
 const launchedState = "launched"
@@ -85,7 +86,7 @@ func newDeployer() (*deployer, error) {
 		return &deployer{}, err
 	}
 	etcdapi := etcdClient.NewKeysAPI(c)
-	return &deployer{fleetapi: fleetHTTPAPIClient, serviceDefinitionClient: serviceDefinitionClient, isDebug: *isDebug, etcdapi: etcdapi, httpClient: httpClient}, nil
+	return &deployer{fleetapi: fleetHTTPAPIClient, serviceDefinitionClient: serviceDefinitionClient, isDebug: *isDebug, etcdapi: etcdapi, httpClient: httpClient, gtgURL: *gtgURL}, nil
 }
 
 func (d *deployer) deployAll() error {
@@ -374,16 +375,9 @@ func (d *deployer) performSequentialDeployment(sg serviceGroup) {
 		}
 		log.Printf("HC node value: %s", etcdResp.Node.Value)
 		if etcdResp.Node.Value == "true" {
-			etcdResp, err := d.etcdapi.Get(context.Background(), "/ft/config/environment_tag", nil)
+			gtgResp, err := d.httpClient.Get(fmt.Sprintf("%s/__%s/__gtg", d.gtgURL, getServiceName(u.Name)))
 			if err != nil {
-				//TODO default to wait for unit
-				log.Printf("Error while getting envrionment from %s: %v", "/ft/config/environment_tag", err.Error())
-			}
-			env := etcdResp.Node.Value
-			//TODO check gtg Endpoints
-			gtgResp, err := d.httpClient.Get(fmt.Sprintf("https://%s-up-coco.ft.com/__%s/__gtg", env, getServiceName(u.Name)))
-			if err != nil {
-				log.Printf("Error calling %s: %v", fmt.Sprintf("https://%s-up-coco.ft.com/__%s/__gtg", env, getServiceName(u.Name)), err.Error())
+				log.Printf("Error calling %s: %v", fmt.Sprintf("%s/__%s/__gtg", d.gtgURL, getServiceName(u.Name)), err.Error())
 			}
 			gtgResp.Body.Close()
 
