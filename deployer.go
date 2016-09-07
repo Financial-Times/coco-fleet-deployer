@@ -368,8 +368,14 @@ func (d *deployer) performSequentialDeployment(sg serviceGroup) {
 		}
 
 		if d.hasGTG(u.Name) {
+			if d.isDebug {
+				log.Printf("DEBUG Service %s has a GTG endpoint - will be used for sequential deployment check.", u.Name)
+			}
 			d.waitForUnitToLaunch(u.Name, d.checkUnitHealth)
 		} else {
+			if d.isDebug {
+				log.Printf("DEBUG Service %s doesn't have a GTG endpoint - unit status will be used for sequential deployment check.", u.Name)
+			}
 			var unitToWaitOn string
 			if len(sg.sidekicks) == 0 {
 				unitToWaitOn = u.Name
@@ -434,10 +440,13 @@ func (d *deployer) checkUnitHealth(unitName string) bool {
 	gtgPath := fmt.Sprintf("%s/__%s/__gtg", d.gtgURL, getServiceName(unitName))
 	gtgResp, err := d.httpClient.Get(gtgPath)
 	if err != nil {
-		log.Printf("Error calling %s: %v", gtgPath, err.Error())
+		log.Printf("ERROR Error calling %s: %v", gtgPath, err.Error())
 		return false
 	}
 	gtgResp.Body.Close()
+	if d.isDebug {
+		log.Printf("DEBUG Called %s to get GTG for %s, result: %d.", gtgPath, unitName, gtgResp.StatusCode)
+	}
 	return gtgResp.StatusCode == http.StatusOK
 }
 
