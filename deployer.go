@@ -454,12 +454,16 @@ func (d *deployer) hasGTG(unitName string) bool {
 	etcdValuePath := fmt.Sprintf("/ft/services/%s/healthcheck", getServiceName(unitName))
 	etcdResp, err := d.etcdapi.Get(context.Background(), etcdValuePath, nil)
 	if err != nil {
-		log.Printf("Error while getting etcd key for app from %s: %v", etcdValuePath, err.Error())
+		log.Printf("ERROR Error while getting etcd key for app from %s: %v", etcdValuePath, err.Error())
+		return false
 	}
 	if etcdResp.Node == nil {
-		log.Printf("Error while getting etcd key for app from %s: node is nil", etcdValuePath)
+		log.Printf("ERROR Error while getting etcd key for app from %s: node is nil", etcdValuePath)
+		return false
 	}
-	log.Printf("HC node value: %s", etcdResp.Node.Value)
+	if d.isDebug {
+		log.Printf("Healthcheck setting value at %s is %s", etcdValuePath, etcdResp.Node.Value)
+	}
 	return etcdResp.Node.Value == "true"
 }
 
