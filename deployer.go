@@ -41,7 +41,10 @@ func newDeployer() (*deployer, error) {
 	if err != nil {
 		return &deployer{}, err
 	}
-	httpClient := &http.Client{Transport: &http.Transport{MaxIdleConnsPerHost: 100}}
+	httpClient := &http.Client{
+		Timeout:   60 * time.Second,
+		Transport: &http.Transport{MaxIdleConnsPerHost: 100},
+	}
 
 	if *socksProxy != "" {
 		log.Printf("using proxy %s\n", *socksProxy)
@@ -71,7 +74,7 @@ func newDeployer() (*deployer, error) {
 		fleetHTTPAPIClient = noDestroyFleetAPI{fleetHTTPAPIClient}
 	}
 	serviceDefinitionClient := &httpServiceDefinitionClient{
-		httpClient: &http.Client{Transport: &http.Transport{MaxIdleConnsPerHost: 100}},
+		httpClient: httpClient,
 		rootURI:    *rootURI,
 	}
 
@@ -86,7 +89,14 @@ func newDeployer() (*deployer, error) {
 		return &deployer{}, err
 	}
 	etcdapi := etcdClient.NewKeysAPI(c)
-	return &deployer{fleetapi: fleetHTTPAPIClient, serviceDefinitionClient: serviceDefinitionClient, isDebug: *isDebug, etcdapi: etcdapi, httpClient: httpClient, gtgURL: *gtgURL}, nil
+	return &deployer{
+		fleetapi:                fleetHTTPAPIClient,
+		serviceDefinitionClient: serviceDefinitionClient,
+		isDebug:                 *isDebug,
+		etcdapi:                 etcdapi,
+		httpClient:              httpClient,
+		gtgURL:                  *gtgURL,
+	}, nil
 }
 
 func (d *deployer) deployAll() error {
@@ -454,15 +464,15 @@ func (d *deployer) hasGTG(unitName string) bool {
 	etcdValuePath := fmt.Sprintf("/ft/services/%s/healthcheck", getServiceName(unitName))
 	etcdResp, err := d.etcdapi.Get(context.Background(), etcdValuePath, nil)
 	if err != nil {
-		log.Printf("ERROR Error while getting etcd key for app from %s: %v", etcdValuePath, err.Error())
+		log.Printf("WARNING Error while getting etcd key for app from %s: %v", etcdValuePath, err.Error())
 		return false
 	}
 	if etcdResp.Node == nil {
-		log.Printf("ERROR Error while getting etcd key for app from %s: node is nil", etcdValuePath)
+		log.Printf("WARNING Error while getting etcd key for app from %s: node is nil", etcdValuePath)
 		return false
 	}
 	if d.isDebug {
-		log.Printf("Healthcheck setting value at %s is %s", etcdValuePath, etcdResp.Node.Value)
+		log.Printf("DEBUG Healthcheck setting value at %s is %s", etcdValuePath, etcdResp.Node.Value)
 	}
 	return etcdResp.Node.Value == "true"
 }

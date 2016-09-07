@@ -8,6 +8,7 @@ import (
 	"github.com/coreos/fleet/schema"
 )
 
+//TODO add env var support
 var (
 	destroyFlag             = flag.Bool("destroy", false, "Destroy units not found in the definition")
 	fleetEndpoint           = flag.String("fleetEndpoint", "", "Fleet API http endpoint: `http://host:port`")
