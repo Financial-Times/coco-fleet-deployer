@@ -351,7 +351,8 @@ func (d *deployer) performSequentialDeploymentSK(sg serviceGroup) {
 		if (i + 1) == len(sg.sidekicks) { //this is the last node, we're done
 			break
 		}
-		d.waitForUnitToLaunch(u.Name)
+
+		d.waitForUnitToLaunch(u.Name, d.checkUnitState)
 	}
 }
 
@@ -366,35 +367,17 @@ func (d *deployer) performSequentialDeployment(sg serviceGroup) {
 			break
 		}
 
-		// read from etcd entry for app
-		//TODO context with timeout
-		etcdResp, err := d.etcdapi.Get(context.Background(), fmt.Sprintf("/ft/services/%s/healthcheck", getServiceName(u.Name)), nil)
-		if err != nil {
-			//TODO default to wait for unit
-			log.Printf("Error while getting etcd key for app from %s: %v", fmt.Sprintf("/ft/services/%s/healthcheck", getServiceName(u.Name)), err.Error())
-		}
-		log.Printf("HC node value: %s", etcdResp.Node.Value)
-		if etcdResp.Node.Value == "true" {
-			gtgResp, err := d.httpClient.Get(fmt.Sprintf("%s/__%s/__gtg", d.gtgURL, getServiceName(u.Name)))
-			if err != nil {
-				log.Printf("Error calling %s: %v", fmt.Sprintf("%s/__%s/__gtg", d.gtgURL, getServiceName(u.Name)), err.Error())
-			}
-			gtgResp.Body.Close()
-
-			if gtgResp.StatusCode != http.StatusOK {
-				log.Printf("App is not up yet, waiting more!")
-			}
-			return
-		}
-
-		var unitToWaitOn string
-		if len(sg.sidekicks) == 0 {
-			unitToWaitOn = u.Name
+		if d.hasGTG(u.Name) {
+			d.waitForUnitToLaunch(u.Name, d.checkUnitHealth)
 		} else {
-			unitToWaitOn = strings.Replace(u.Name, "@", "-sidekick@", 1)
+			var unitToWaitOn string
+			if len(sg.sidekicks) == 0 {
+				unitToWaitOn = u.Name
+			} else {
+				unitToWaitOn = strings.Replace(u.Name, "@", "-sidekick@", 1)
+			}
+			d.waitForUnitToLaunch(unitToWaitOn, d.checkUnitState)
 		}
-
-		d.waitForUnitToLaunch(unitToWaitOn)
 	}
 }
 
@@ -412,7 +395,7 @@ func (d *deployer) updateCorrespondingSK(service *schema.Unit, sidekicks []*sche
 	}
 }
 
-func (d *deployer) waitForUnitToLaunch(unitName string) {
+func (d *deployer) waitForUnitToLaunch(unitName string, isUnitLaunched func(string) bool) {
 	timeoutChan := make(chan bool)
 	go func() {
 		<-time.After(launchTimeout)
@@ -423,14 +406,7 @@ func (d *deployer) waitForUnitToLaunch(unitName string) {
 	for {
 		select {
 		case <-tickerChan.C:
-			unitStatus, err := d.fleetapi.Unit(unitName)
-			if err != nil {
-				log.Printf("WARNING Failed to get unit %s: %v [SKIPPING]", unitName, err)
-				continue
-			}
-
-			log.Printf("INFO UnitToWaitOn status: [%v]\n", unitStatus.CurrentState)
-			if unitStatus.CurrentState == launchedState {
+			if launched := isUnitLaunched(unitName); launched {
 				tickerChan.Stop()
 				break
 			}
@@ -442,6 +418,40 @@ func (d *deployer) waitForUnitToLaunch(unitName string) {
 		}
 		break
 	}
+}
+
+func (d *deployer) checkUnitState(unitName string) bool {
+	unitStatus, err := d.fleetapi.Unit(unitName)
+	if err != nil {
+		log.Printf("WARNING Failed to get unit %s: %v [SKIPPING]", unitName, err)
+		return false
+	}
+	log.Printf("INFO UnitToWaitOn status: [%v]\n", unitStatus.CurrentState)
+	return unitStatus.CurrentState == launchedState
+}
+
+func (d *deployer) checkUnitHealth(unitName string) bool {
+	gtgPath := fmt.Sprintf("%s/__%s/__gtg", d.gtgURL, getServiceName(unitName))
+	gtgResp, err := d.httpClient.Get(gtgPath)
+	if err != nil {
+		log.Printf("Error calling %s: %v", gtgPath, err.Error())
+		return false
+	}
+	gtgResp.Body.Close()
+	return gtgResp.StatusCode == http.StatusOK
+}
+
+func (d *deployer) hasGTG(unitName string) bool {
+	etcdValuePath := fmt.Sprintf("/ft/services/%s/healthcheck", getServiceName(unitName))
+	etcdResp, err := d.etcdapi.Get(context.Background(), etcdValuePath, nil)
+	if err != nil {
+		log.Printf("Error while getting etcd key for app from %s: %v", etcdValuePath, err.Error())
+	}
+	if etcdResp.Node == nil {
+		log.Printf("Error while getting etcd key for app from %s: node is nil", etcdValuePath)
+	}
+	log.Printf("HC node value: %s", etcdResp.Node.Value)
+	return etcdResp.Node.Value == "true"
 }
 
 func (d *deployer) buildCurrentUnits() (map[string]*schema.Unit, error) {
