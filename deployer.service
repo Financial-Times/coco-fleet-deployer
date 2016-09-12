@@ -16,7 +16,7 @@ ExecStart=/bin/sh -c '\
   -e="DESTROY=true" \
   -e="IS_DEBUG=$IS_DEBUG" \
   -e="ROOT_URI=$ROOT_URI" \
-  -e="GTG_URL=http://$HOSTNAME:8080" \
+  -e="GTG_URL_PREFIX=http://$HOSTNAME:8080" \
   -e="ETCD_URL=http://$HOSTNAME:2379" \
   -e="FLEET_ENDPOINT=http://$HOSTNAME:49153" \
   coco/coco-fleet-deployer:$DOCKER_APP_VERSION'

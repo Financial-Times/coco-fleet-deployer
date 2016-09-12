@@ -26,7 +26,7 @@ type deployer struct {
 	isDebug                 bool
 	etcdapi                 etcdClient.KeysAPI
 	httpClient              *http.Client
-	gtgURL                  string
+	gtgURLPrefix            string
 }
 
 const launchedState = "launched"
@@ -95,7 +95,7 @@ func newDeployer() (*deployer, error) {
 		isDebug:                 *isDebug,
 		etcdapi:                 etcdapi,
 		httpClient:              httpClient,
-		gtgURL:                  *gtgURL,
+		gtgURLPrefix:            *gtgURLPrefix,
 	}, nil
 }
 
@@ -447,7 +447,7 @@ func (d *deployer) checkUnitState(unitName string) bool {
 }
 
 func (d *deployer) checkUnitHealth(unitName string) bool {
-	gtgPath := fmt.Sprintf("%s/__%s/__gtg", d.gtgURL, getServiceName(unitName))
+	gtgPath := fmt.Sprintf("%s/__%s/__gtg", d.gtgURLPrefix, getServiceName(unitName))
 	gtgResp, err := d.httpClient.Get(gtgPath)
 	if err != nil {
 		log.Printf("ERROR Error calling %s: %v", gtgPath, err.Error())
