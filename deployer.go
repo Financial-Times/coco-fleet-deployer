@@ -227,8 +227,8 @@ func (d *deployer) identifyUpdatedServiceGroups(serviceGroups map[string]service
 		if len(sg.sidekicks) > 0 {
 			if d.isUpdatedUnit(sg.sidekicks[0]) {
 				if d.isDebug {
-					log.Printf("Unit %s detected as updated!", sg.serviceNodes[0].Name)
-					log.Printf("Wanted unit options: \n\n %# v \n\n", pretty.Formatter(sg.serviceNodes[0].Options))
+					log.Printf("Unit %s detected as updated!", sg.sidekicks[0].Name)
+					log.Printf("Wanted unit options: \n\n %# v \n\n", pretty.Formatter(sg.sidekicks[0].Options))
 				}
 				if sg.isZDD {
 					skUpdatedSequential[name] = sg
