@@ -49,6 +49,20 @@ coco-fleet-deployer -fleetEndpoint="http://localhost:49153" -rootURI="https://ra
 
 - identify changes made manually in the cluster and restore the wanted state - this used to be the case before the cache was introduced (don't think of the deployer as puppet)
 
+## How to upgrade the deployer
+
+- the deployer's lifecycle is handled manually in our clusters
+- this means that, to upgrade the deployer, you have to:
+    - create a new branch from master
+    - update the version in the `deployer.service` file
+    - PR for the branch, get it approved, merge
+    - upgrade manually in the clusters: log on to a machine in the cluster and execute
+        - `fleetctl stop deployer`
+        - `fleetctl destroy deployer`
+        - `wget https://raw.githubusercontent.com/Financial-Times/coco-fleet-deployer/master/deployer.service`
+        - `fleetctl start deployer.service`
+        - monitor deployer logs to make sure it gets the right version and it runs correctly
+
 # Features
 
 ## Debug logging
