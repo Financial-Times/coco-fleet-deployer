@@ -26,7 +26,7 @@ type deployer struct {
 	isDebug                 bool
 	etcdapi                 etcdClient.KeysAPI
 	httpClient              *http.Client
-	gtgURLPrefix            string
+	healthURLPrefix         string
 }
 
 const launchedState = "launched"
@@ -95,7 +95,7 @@ func newDeployer() (*deployer, error) {
 		isDebug:                 *isDebug,
 		etcdapi:                 etcdapi,
 		httpClient:              httpClient,
-		gtgURLPrefix:            *gtgURLPrefix,
+		healthURLPrefix:         *healthURLPrefix,
 	}, nil
 }
 
@@ -377,14 +377,14 @@ func (d *deployer) performSequentialDeployment(sg serviceGroup) {
 			break
 		}
 
-		if d.hasGTG(u.Name) {
+		if d.hasHealthcheck(u.Name) {
 			if d.isDebug {
-				log.Printf("DEBUG Service %s has a GTG endpoint - will be used for sequential deployment check.", u.Name)
+				log.Printf("DEBUG Service %s has a healthcheck endpoint - will be used for sequential deployment check.", u.Name)
 			}
 			d.waitForUnitToLaunch(u.Name, d.checkUnitHealth)
 		} else {
 			if d.isDebug {
-				log.Printf("DEBUG Service %s doesn't have a GTG endpoint - unit status will be used for sequential deployment check.", u.Name)
+				log.Printf("DEBUG Service %s doesn't have a healthcheck endpoint - unit status will be used for sequential deployment check.", u.Name)
 			}
 			var unitToWaitOn string
 			if len(sg.sidekicks) == 0 {
@@ -447,20 +447,21 @@ func (d *deployer) checkUnitState(unitName string) bool {
 }
 
 func (d *deployer) checkUnitHealth(unitName string) bool {
-	gtgPath := fmt.Sprintf("%s/__%s/__gtg", d.gtgURLPrefix, getServiceName(unitName))
-	gtgResp, err := d.httpClient.Get(gtgPath)
+	hcPath := fmt.Sprintf("%s/__%s/__health", d.healthURLPrefix, getServiceName(unitName))
+	hcResp, err := d.httpClient.Get(hcPath)
 	if err != nil {
-		log.Printf("ERROR Error calling %s: %v", gtgPath, err.Error())
+		log.Printf("ERROR Error calling %s: %v", hcPath, err.Error())
 		return false
 	}
-	gtgResp.Body.Close()
+	hcResp.Body.Close()
 	if d.isDebug {
-		log.Printf("DEBUG Called %s to get GTG for %s, result: %d.", gtgPath, unitName, gtgResp.StatusCode)
+		log.Printf("DEBUG Called %s to get healthcheck for %s, result: %d.", hcPath, unitName, hcResp.StatusCode)
 	}
-	return gtgResp.StatusCode == http.StatusOK
+	//TODO implement json parsing of checks
+	return hcResp.StatusCode == http.StatusOK
 }
 
-func (d *deployer) hasGTG(unitName string) bool {
+func (d *deployer) hasHealthcheck(unitName string) bool {
 	etcdValuePath := fmt.Sprintf("/ft/services/%s/healthcheck", getServiceName(unitName))
 	etcdResp, err := d.etcdapi.Get(context.Background(), etcdValuePath, nil)
 	if err != nil {
