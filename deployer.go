@@ -1,7 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -15,6 +18,7 @@ import (
 	"github.com/coreos/fleet/client"
 	"github.com/coreos/fleet/schema"
 	"github.com/coreos/fleet/unit"
+	"github.com/kr/pretty"
 	"golang.org/x/net/context"
 	"golang.org/x/net/proxy"
 )
@@ -451,18 +455,49 @@ func (d *deployer) checkUnitState(unitName string) bool {
 }
 
 func (d *deployer) checkUnitHealth(unitName string) bool {
-	hcPath := fmt.Sprintf("%s/%s%s/%s", d.healthURLPrefix, d.serviceNamePrefix, getServiceName(unitName), d.healthEndpoint)
-	hcResp, err := d.httpClient.Get(hcPath)
+	url := fmt.Sprintf("%s/%s%s/%s", d.healthURLPrefix, d.serviceNamePrefix, getServiceName(unitName), d.healthEndpoint)
+	resp, err := d.httpClient.Get(url)
 	if err != nil {
-		log.Printf("ERROR Error calling %s: %v", hcPath, err.Error())
+		log.Printf("ERROR Error calling %s: %v", url, err.Error())
 		return false
 	}
-	hcResp.Body.Close()
+
+	defer func() {
+		io.Copy(ioutil.Discard, resp.Body)
+		resp.Body.Close()
+	}()
+
 	if d.isDebug {
-		log.Printf("DEBUG Called %s to get healthcheck for %s, result: %d.", hcPath, unitName, hcResp.StatusCode)
+		log.Printf("DEBUG Called %s to get healthcheck for %s.", url, unitName)
 	}
-	//TODO implement json parsing of checks
-	return hcResp.StatusCode == http.StatusOK
+
+	if resp.StatusCode != http.StatusOK {
+		return false
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("ERROR Error reading healthcheck response: " + err.Error())
+		return false
+	}
+
+	health := &healthcheckResponse{}
+	if err := json.Unmarshal(body, &health); err != nil {
+		log.Printf("ERROR Error parsing healthcheck response: " + err.Error())
+		return false
+	}
+
+	if d.isDebug {
+		fmt.Printf("DEBUG healthcheck response: \n %# v \n", pretty.Formatter(health))
+	}
+
+	for _, check := range health.Checks {
+		if check.OK != true {
+			return false
+		}
+	}
+
+	return true
 }
 
 func (d *deployer) hasHealthcheck(unitName string) bool {

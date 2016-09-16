@@ -47,6 +47,14 @@ type serviceGroup struct {
 	isZDD        bool
 }
 
+type healthcheckResponse struct {
+	Name   string
+	Checks []struct {
+		Name string
+		OK   bool
+	}
+}
+
 func main() {
 	flag.Parse()
 	if *fleetEndpoint == "" {
