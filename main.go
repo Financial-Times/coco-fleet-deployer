@@ -70,7 +70,10 @@ func main() {
 		panic(err)
 	}
 
-	log.Printf("Using configuration: \n %# v \n", pretty.Formatter(d))
+	if d.isDebug {
+		log.Printf("DEBUG Using configuration: \n %# v \n", pretty.Formatter(d))
+	}
+
 	for {
 		log.Printf("Starting deploy run")
 		if err := d.deployAll(); err != nil {
