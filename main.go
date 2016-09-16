@@ -18,6 +18,8 @@ var (
 	isDebug                 = flag.Bool("isDebug", false, "Enable to show debug logs.")
 	etcdURL                 = flag.String("etcd-url", "http://localhost:2379", "etcd URL")
 	healthURLPrefix         = flag.String("health-url-prefix", "http://localhost:8080", "health URL prefix")
+	healthEndpoint          = flag.String("health-endpoint", "__health", "health endpoint")
+	serviceNamePrefix       = flag.String("service-name-prefix", "__", "service name prefix")
 )
 
 type services struct {

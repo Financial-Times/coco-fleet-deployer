@@ -27,6 +27,8 @@ type deployer struct {
 	etcdapi                 etcdClient.KeysAPI
 	httpClient              *http.Client
 	healthURLPrefix         string
+	healthEndpoint          string
+	serviceNamePrefix       string
 }
 
 const launchedState = "launched"
@@ -96,6 +98,8 @@ func newDeployer() (*deployer, error) {
 		etcdapi:                 etcdapi,
 		httpClient:              httpClient,
 		healthURLPrefix:         *healthURLPrefix,
+		healthEndpoint:          *healthEndpoint,
+		serviceNamePrefix:       *serviceNamePrefix,
 	}, nil
 }
 
@@ -447,7 +451,7 @@ func (d *deployer) checkUnitState(unitName string) bool {
 }
 
 func (d *deployer) checkUnitHealth(unitName string) bool {
-	hcPath := fmt.Sprintf("%s/__%s/__health", d.healthURLPrefix, getServiceName(unitName))
+	hcPath := fmt.Sprintf("%s/%s%s/%s", d.healthURLPrefix, d.serviceNamePrefix, getServiceName(unitName), d.healthEndpoint)
 	hcResp, err := d.httpClient.Get(hcPath)
 	if err != nil {
 		log.Printf("ERROR Error calling %s: %v", hcPath, err.Error())

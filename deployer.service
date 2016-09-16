@@ -12,6 +12,8 @@ ExecStartPre=-/bin/sh -c 'docker rm %p >/dev/null 2>&1'
 ExecStart=/bin/sh -c '\
   ROOT_URI=$(etcdctl get /ft/config/services-definition-root-uri); \
   IS_DEBUG=$(etcdctl get /ft/config/deployer/is-debug) || IS_DEBUG=false; \
+  HEALTH_ENDPOINT=$(etcdctl get /ft/config/deployer/health-endpoint) || HEALTH_ENDPOINT=__health; \
+  SERVICE_NAME_PREFIX=$(etcdctl get /ft/config/deployer/service-name-prefix) || SERVICE_NAME_PREFIX=__; \
   docker run -v "/etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt" --rm --name %p \
   -e="DESTROY=true" \
   -e="IS_DEBUG=$IS_DEBUG" \
@@ -19,6 +21,8 @@ ExecStart=/bin/sh -c '\
   -e="HEALTH_URL_PREFIX=http://$HOSTNAME:8080" \
   -e="ETCD_URL=http://$HOSTNAME:2379" \
   -e="FLEET_ENDPOINT=http://$HOSTNAME:49153" \
+  -e="HEALTH_ENDPOINT=$HEALTH_ENDPOINT" \
+  -e="SERVICE_NAME_PREFIX=$SERVICE_NAME_PREFIX" \
   coco/coco-fleet-deployer:$DOCKER_APP_VERSION'
 ExecStop=/usr/bin/docker stop -t 3 %p
 Restart=on-failure
