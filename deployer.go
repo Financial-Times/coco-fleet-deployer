@@ -27,6 +27,7 @@ type deployer struct {
 	fleetapi                client.API
 	serviceDefinitionClient serviceDefinitionClient
 	unitCache               map[string]unit.Hash
+	nodeCountCache          map[string]int
 	isDebug                 bool
 	etcdapi                 etcdClient.KeysAPI
 	httpClient              *http.Client
@@ -112,12 +113,16 @@ func (d *deployer) deployAll() error {
 		log.Println("Debug log enabled.")
 	}
 	if d.unitCache == nil {
-		uc, err := d.buildUnitCache()
+		uc, ncc, err := d.buildCaches()
 		if err != nil {
 			log.Printf("ERROR Cannot build unit cache, aborting run: [%v]", err)
 			return err
 		}
 		d.unitCache = uc
+		if d.isDebug {
+			log.Printf("Count cache:\n %# v \n", pretty.Formatter(ncc))
+		}
+		d.nodeCountCache = ncc
 	}
 
 	wantedServiceGroups, err := d.buildWantedUnits()
@@ -127,18 +132,26 @@ func (d *deployer) deployAll() error {
 
 	toDelete := d.identifyDeletedServiceGroups(wantedServiceGroups)
 	toCreate := d.identifyNewServiceGroups(wantedServiceGroups)
+	sgsWithNodesAdded := d.identifySGsWithNodesAdded(wantedServiceGroups)
+	sgsWithNodesRemoved := d.identifySGsWithNodesRemoved(wantedServiceGroups)
 	purgeProcessed(wantedServiceGroups, toCreate)
 	toUpdateRegular, toUpdateSKRegular, toUpdateSequentially, toUpdateSKSequentially := d.identifyUpdatedServiceGroups(wantedServiceGroups)
 
 	d.createServiceGroups(toCreate)
+	d.createNodes(sgsWithNodesAdded)
+	d.deleteNodes(sgsWithNodesRemoved)
 	d.updateServiceGroupsNormally(toUpdateRegular)
 	d.updateServiceGroupsSequentially(toUpdateSequentially)
 	d.updateServiceGroupsSKsOnly(toUpdateSKRegular)
 	d.updateServiceGroupsSKsSequentially(toUpdateSKSequentially)
 	d.deleteServiceGroups(toDelete)
 
-	d.updateCache(mergeMaps(toCreate, toUpdateRegular, toUpdateSequentially, toUpdateSKRegular, toUpdateSKSequentially))
-	d.removeFromCache(toDelete)
+	if changesDone(toCreate, sgsWithNodesAdded, sgsWithNodesRemoved, toUpdateRegular, toUpdateSequentially, toUpdateSKRegular, toUpdateSKSequentially, toDelete) {
+		if d.isDebug {
+			log.Printf("Invalidating cache.")
+		}
+		d.unitCache = nil
+	}
 
 	return nil
 }
@@ -159,17 +172,23 @@ func (d *deployer) removeFromCache(serviceGroups map[string]serviceGroup) {
 	}
 }
 
-func (d *deployer) buildUnitCache() (map[string]unit.Hash, error) {
+func (d *deployer) buildCaches() (map[string]unit.Hash, map[string]int, error) {
 	units, err := d.fleetapi.Units()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	unitCache := make(map[string]unit.Hash)
+	countCache := make(map[string]int)
 	for _, unit := range units {
 		unitCache[unit.Name] = getUnitHash(unit)
+		if !strings.Contains(unit.Name, "sidekick") {
+			serviceName := getServiceName(unit.Name)
+			currentCount := countCache[serviceName]
+			countCache[serviceName] = currentCount + 1
+		}
 	}
-	return unitCache, nil
+	return unitCache, countCache, nil
 }
 
 func (d *deployer) identifyNewServiceGroups(serviceGroups map[string]serviceGroup) map[string]serviceGroup {
@@ -192,6 +211,32 @@ func (d *deployer) identifyNewServiceGroups(serviceGroups map[string]serviceGrou
 	return newServiceGroups
 }
 
+func (d *deployer) identifySGsWithNodesAdded(serviceGroups map[string]serviceGroup) map[string]serviceGroup {
+	newNodes := make(map[string]serviceGroup)
+	for name, sg := range serviceGroups {
+		if len(sg.serviceNodes) > d.nodeCountCache[name] {
+			if d.isDebug {
+				log.Printf("Servicegroup %s had nodes added in servicefile.", name)
+			}
+			newNodes[name] = sg
+		}
+	}
+	return newNodes
+}
+
+func (d *deployer) identifySGsWithNodesRemoved(serviceGroups map[string]serviceGroup) map[string]serviceGroup {
+	extraNodes := make(map[string]serviceGroup)
+	for name, sg := range serviceGroups {
+		if len(sg.serviceNodes) < d.nodeCountCache[name] {
+			if d.isDebug {
+				log.Printf("Servicegroup %s had nodes removed in servicefile.", name)
+			}
+			extraNodes[name] = sg
+		}
+	}
+	return extraNodes
+}
+
 func (d *deployer) identifyUpdatedServiceGroups(serviceGroups map[string]serviceGroup) (map[string]serviceGroup, map[string]serviceGroup, map[string]serviceGroup, map[string]serviceGroup) {
 	updatedRegular := make(map[string]serviceGroup)
 	skUpdatedRegular := make(map[string]serviceGroup)
@@ -201,6 +246,10 @@ func (d *deployer) identifyUpdatedServiceGroups(serviceGroups map[string]service
 	for name, sg := range serviceGroups {
 		if len(sg.serviceNodes) > 0 {
 			if d.isUpdatedUnit(sg.serviceNodes[0]) {
+				if d.isDebug {
+					log.Printf("Unit %s detected as updated!", sg.serviceNodes[0].Name)
+					log.Printf("Wanted unit options: \n\n %# v \n\n", pretty.Formatter(sg.serviceNodes[0].Options))
+				}
 				if sg.isZDD {
 					updatedSequential[name] = sg
 				} else {
@@ -211,6 +260,10 @@ func (d *deployer) identifyUpdatedServiceGroups(serviceGroups map[string]service
 		}
 		if len(sg.sidekicks) > 0 {
 			if d.isUpdatedUnit(sg.sidekicks[0]) {
+				if d.isDebug {
+					log.Printf("Unit %s detected as updated!", sg.sidekicks[0].Name)
+					log.Printf("Wanted unit options: \n\n %# v \n\n", pretty.Formatter(sg.sidekicks[0].Options))
+				}
 				if sg.isZDD {
 					skUpdatedSequential[name] = sg
 				} else {
@@ -253,6 +306,52 @@ func (d *deployer) createServiceGroups(serviceGroups map[string]serviceGroup) {
 		}
 	}
 	d.launch(serviceGroups)
+}
+
+func (d *deployer) createNodes(serviceGroups map[string]serviceGroup) {
+	for _, sg := range serviceGroups {
+		for _, u := range sg.getUnits() {
+			if _, ok := d.unitCache[u.Name]; !ok {
+				if d.isDebug {
+					log.Printf("Unit %s is a new node for an existing service group.", u.Name)
+				}
+				d.fleetapi.CreateUnit(u)
+				d.launchNewUnit(u)
+			}
+		}
+	}
+}
+
+func (d *deployer) deleteNodes(serviceGroups map[string]serviceGroup) {
+	for _, sg := range serviceGroups {
+		currentNodes := []string{}
+		serviceName := getServiceName(sg.serviceNodes[0].Name)
+
+		// build the list of current nodes of this SG
+		for k := range d.unitCache {
+			existingServiceName := getServiceName(k)
+			if serviceName == existingServiceName {
+				currentNodes = append(currentNodes, k)
+			}
+		}
+		if d.isDebug {
+			log.Printf("Current nodes for sg %s: %# v", serviceName, pretty.Formatter(currentNodes))
+		}
+		//for each node of the current servicegroup, see if it's in the wanted list
+		for _, currentNode := range currentNodes {
+			isNeeded := false
+			for _, u := range sg.getUnits() {
+				if currentNode == u.Name {
+					isNeeded = true
+					break
+				}
+			}
+			if isNeeded {
+				continue
+			}
+			d.fleetapi.DestroyUnit(currentNode)
+		}
+	}
 }
 
 func (d *deployer) updateServiceGroupsSKsOnly(serviceGroups map[string]serviceGroup) {
@@ -605,6 +704,16 @@ func (d *deployer) launchUnit(u *schema.Unit, currentUnits map[string]*schema.Un
 	}
 }
 
+func (d *deployer) launchNewUnit(u *schema.Unit) {
+	if d.isDebug {
+		log.Printf("Launching unit %s", u.Name)
+	}
+	if u.DesiredState == "" {
+		u.DesiredState = launchedState
+	}
+	d.fleetapi.SetUnitTargetState(u.Name, u.DesiredState)
+}
+
 func updateServiceGroupMap(u *schema.Unit, serviceName string, isSidekick bool, serviceGroups map[string]serviceGroup) map[string]serviceGroup {
 	if sg, ok := serviceGroups[serviceName]; ok {
 		if isSidekick {
@@ -667,14 +776,13 @@ func getUnitHash(unit *schema.Unit) unit.Hash {
 	return unitFile.Hash()
 }
 
-func mergeMaps(maps ...map[string]serviceGroup) map[string]serviceGroup {
-	merged := make(map[string]serviceGroup)
+func changesDone(maps ...map[string]serviceGroup) bool {
 	for _, sgMap := range maps {
-		for k, v := range sgMap {
-			merged[k] = v
+		if len(sgMap) > 0 {
+			return true
 		}
 	}
-	return merged
+	return false
 }
 
 func (sg *serviceGroup) getUnits() []*schema.Unit {
