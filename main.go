@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/coreos/fleet/schema"
+	"github.com/kr/pretty"
 )
 
 //TODO add env var support
@@ -61,6 +62,7 @@ func main() {
 		panic(err)
 	}
 
+	log.Printf("Using configuration: \n %# v \n", pretty.Formatter(d))
 	for {
 		log.Printf("Starting deploy run")
 		if err := d.deployAll(); err != nil {
