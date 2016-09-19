@@ -14,5 +14,5 @@ RUN apk --update add go git gcc linux-headers libc-dev \
   && apk del go git gcc linux-headers libc-dev \
   && rm -rf $GOPATH /var/cache/apk/*
 
-CMD /coco-fleet-deployer -fleetEndpoint=$FLEET_ENDPOINT -rootURI=$ROOT_URI -destroy=$DESTROY -isDebug=$IS_DEBUG
+CMD /coco-fleet-deployer -fleetEndpoint=$FLEET_ENDPOINT -rootURI=$ROOT_URI -destroy=$DESTROY -isDebug=$IS_DEBUG -etcd-url=$ETCD_URL -health-url-prefix=$HEALTH_URL_PREFIX -health-endpoint=$HEALTH_ENDPOINT -service-name-prefix=$SERVICE_NAME_PREFIX
 

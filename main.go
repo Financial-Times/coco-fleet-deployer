@@ -6,8 +6,10 @@ import (
 	"time"
 
 	"github.com/coreos/fleet/schema"
+	"github.com/kr/pretty"
 )
 
+//TODO add env var support
 var (
 	destroyFlag             = flag.Bool("destroy", false, "Destroy units not found in the definition")
 	fleetEndpoint           = flag.String("fleetEndpoint", "", "Fleet API http endpoint: `http://host:port`")
@@ -15,6 +17,10 @@ var (
 	destroyServiceBlacklist = map[string]struct{}{"deployer.service": struct{}{}, "deployer.timer": struct{}{}}
 	rootURI                 = flag.String("rootURI", "", "Base uri to use when constructing service file URI. Only used if service file URI is relative.")
 	isDebug                 = flag.Bool("isDebug", false, "Enable to show debug logs.")
+	etcdURL                 = flag.String("etcd-url", "http://localhost:2379", "etcd URL")
+	healthURLPrefix         = flag.String("health-url-prefix", "http://localhost:8080", "health URL prefix")
+	healthEndpoint          = flag.String("health-endpoint", "__health", "health endpoint")
+	serviceNamePrefix       = flag.String("service-name-prefix", "__", "service name prefix")
 )
 
 type services struct {
@@ -41,6 +47,14 @@ type serviceGroup struct {
 	isZDD        bool
 }
 
+type healthcheckResponse struct {
+	Name   string
+	Checks []struct {
+		Name string
+		OK   bool
+	}
+}
+
 func main() {
 	flag.Parse()
 	if *fleetEndpoint == "" {
@@ -54,6 +68,10 @@ func main() {
 	if err != nil {
 		log.Printf("ERROR Error creating new deployer: [%s]", err.Error())
 		panic(err)
+	}
+
+	if d.isDebug {
+		log.Printf("DEBUG Using configuration: \n %# v \n", pretty.Formatter(d))
 	}
 
 	for {

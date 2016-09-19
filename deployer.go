@@ -1,7 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -11,10 +14,12 @@ import (
 
 	"regexp"
 
+	etcdClient "github.com/coreos/etcd/client"
 	"github.com/coreos/fleet/client"
 	"github.com/coreos/fleet/schema"
 	"github.com/coreos/fleet/unit"
 	"github.com/kr/pretty"
+	"golang.org/x/net/context"
 	"golang.org/x/net/proxy"
 )
 
@@ -24,6 +29,11 @@ type deployer struct {
 	unitCache               map[string]unit.Hash
 	nodeCountCache          map[string]int
 	isDebug                 bool
+	etcdapi                 etcdClient.KeysAPI
+	httpClient              *http.Client
+	healthURLPrefix         string
+	healthEndpoint          string
+	serviceNamePrefix       string
 }
 
 const launchedState = "launched"
@@ -38,7 +48,10 @@ func newDeployer() (*deployer, error) {
 	if err != nil {
 		return &deployer{}, err
 	}
-	httpClient := &http.Client{Transport: &http.Transport{MaxIdleConnsPerHost: 100}}
+	httpClient := &http.Client{
+		Timeout:   60 * time.Second,
+		Transport: &http.Transport{MaxIdleConnsPerHost: 100},
+	}
 
 	if *socksProxy != "" {
 		log.Printf("using proxy %s\n", *socksProxy)
@@ -68,10 +81,31 @@ func newDeployer() (*deployer, error) {
 		fleetHTTPAPIClient = noDestroyFleetAPI{fleetHTTPAPIClient}
 	}
 	serviceDefinitionClient := &httpServiceDefinitionClient{
-		httpClient: &http.Client{Transport: &http.Transport{MaxIdleConnsPerHost: 100}},
+		httpClient: httpClient,
 		rootURI:    *rootURI,
 	}
-	return &deployer{fleetapi: fleetHTTPAPIClient, serviceDefinitionClient: serviceDefinitionClient, isDebug: *isDebug}, nil
+
+	etcdClientCfg := etcdClient.Config{
+		Endpoints:               []string{*etcdURL},
+		Transport:               etcdClient.DefaultTransport,
+		HeaderTimeoutPerRequest: time.Second * 5,
+	}
+
+	c, err := etcdClient.New(etcdClientCfg)
+	if err != nil {
+		return &deployer{}, err
+	}
+	etcdapi := etcdClient.NewKeysAPI(c)
+	return &deployer{
+		fleetapi:                fleetHTTPAPIClient,
+		serviceDefinitionClient: serviceDefinitionClient,
+		isDebug:                 *isDebug,
+		etcdapi:                 etcdapi,
+		httpClient:              httpClient,
+		healthURLPrefix:         *healthURLPrefix,
+		healthEndpoint:          *healthEndpoint,
+		serviceNamePrefix:       *serviceNamePrefix,
+	}, nil
 }
 
 func (d *deployer) deployAll() error {
@@ -434,7 +468,8 @@ func (d *deployer) performSequentialDeploymentSK(sg serviceGroup) {
 		if (i + 1) == len(sg.sidekicks) { //this is the last node, we're done
 			break
 		}
-		d.waitForUnitToLaunch(u.Name)
+
+		d.waitForUnitToLaunch(u.Name, d.checkUnitState)
 	}
 }
 
@@ -449,14 +484,23 @@ func (d *deployer) performSequentialDeployment(sg serviceGroup) {
 			break
 		}
 
-		var unitToWaitOn string
-		if len(sg.sidekicks) == 0 {
-			unitToWaitOn = u.Name
+		if d.hasHealthcheck(u.Name) {
+			if d.isDebug {
+				log.Printf("DEBUG Service %s has a healthcheck endpoint - will be used for sequential deployment check.", u.Name)
+			}
+			d.waitForUnitToLaunch(u.Name, d.checkUnitHealth)
 		} else {
-			unitToWaitOn = strings.Replace(u.Name, "@", "-sidekick@", 1)
+			if d.isDebug {
+				log.Printf("DEBUG Service %s doesn't have a healthcheck endpoint - unit status will be used for sequential deployment check.", u.Name)
+			}
+			var unitToWaitOn string
+			if len(sg.sidekicks) == 0 {
+				unitToWaitOn = u.Name
+			} else {
+				unitToWaitOn = strings.Replace(u.Name, "@", "-sidekick@", 1)
+			}
+			d.waitForUnitToLaunch(unitToWaitOn, d.checkUnitState)
 		}
-
-		d.waitForUnitToLaunch(unitToWaitOn)
 	}
 }
 
@@ -474,7 +518,7 @@ func (d *deployer) updateCorrespondingSK(service *schema.Unit, sidekicks []*sche
 	}
 }
 
-func (d *deployer) waitForUnitToLaunch(unitName string) {
+func (d *deployer) waitForUnitToLaunch(unitName string, isUnitLaunched func(string) bool) {
 	timeoutChan := make(chan bool)
 	go func() {
 		<-time.After(launchTimeout)
@@ -485,14 +529,7 @@ func (d *deployer) waitForUnitToLaunch(unitName string) {
 	for {
 		select {
 		case <-tickerChan.C:
-			unitStatus, err := d.fleetapi.Unit(unitName)
-			if err != nil {
-				log.Printf("WARNING Failed to get unit %s: %v [SKIPPING]", unitName, err)
-				continue
-			}
-
-			log.Printf("INFO UnitToWaitOn status: [%v]\n", unitStatus.CurrentState)
-			if unitStatus.CurrentState == launchedState {
+			if launched := isUnitLaunched(unitName); launched {
 				tickerChan.Stop()
 				break
 			}
@@ -504,6 +541,79 @@ func (d *deployer) waitForUnitToLaunch(unitName string) {
 		}
 		break
 	}
+}
+
+func (d *deployer) checkUnitState(unitName string) bool {
+	unitStatus, err := d.fleetapi.Unit(unitName)
+	if err != nil {
+		log.Printf("WARNING Failed to get unit %s: %v [SKIPPING]", unitName, err)
+		return false
+	}
+	log.Printf("INFO UnitToWaitOn status: [%v]\n", unitStatus.CurrentState)
+	return unitStatus.CurrentState == launchedState
+}
+
+func (d *deployer) checkUnitHealth(unitName string) bool {
+	url := fmt.Sprintf("%s/%s%s/%s", d.healthURLPrefix, d.serviceNamePrefix, getServiceName(unitName), d.healthEndpoint)
+	resp, err := d.httpClient.Get(url)
+	if err != nil {
+		log.Printf("ERROR Error calling %s: %v", url, err.Error())
+		return false
+	}
+
+	defer func() {
+		io.Copy(ioutil.Discard, resp.Body)
+		resp.Body.Close()
+	}()
+
+	if d.isDebug {
+		log.Printf("DEBUG Called %s to get healthcheck for %s.", url, unitName)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return false
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("ERROR Error reading healthcheck response: " + err.Error())
+		return false
+	}
+
+	health := &healthcheckResponse{}
+	if err := json.Unmarshal(body, &health); err != nil {
+		log.Printf("ERROR Error parsing healthcheck response: " + err.Error())
+		return false
+	}
+
+	if d.isDebug {
+		fmt.Printf("DEBUG healthcheck response: \n %# v \n", pretty.Formatter(health))
+	}
+
+	for _, check := range health.Checks {
+		if check.OK != true {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (d *deployer) hasHealthcheck(unitName string) bool {
+	etcdValuePath := fmt.Sprintf("/ft/services/%s/healthcheck", getServiceName(unitName))
+	etcdResp, err := d.etcdapi.Get(context.Background(), etcdValuePath, nil)
+	if err != nil {
+		log.Printf("WARNING Error while getting etcd key for app from %s: %v", etcdValuePath, err.Error())
+		return false
+	}
+	if etcdResp.Node == nil {
+		log.Printf("WARNING Error while getting etcd key for app from %s: node is nil", etcdValuePath)
+		return false
+	}
+	if d.isDebug {
+		log.Printf("DEBUG Healthcheck setting value at %s is %s", etcdValuePath, etcdResp.Node.Value)
+	}
+	return etcdResp.Node.Value == "true"
 }
 
 func (d *deployer) buildCurrentUnits() (map[string]*schema.Unit, error) {
