@@ -7,14 +7,16 @@ Requires=docker.service
 Environment="DOCKER_APP_VERSION=1.2.3"
 TimeoutStartSec=0
 KillMode=none
-ExecStartPre=-/bin/sh -c 'docker kill %p >/dev/null 2>&1'
-ExecStartPre=-/bin/sh -c 'docker rm %p >/dev/null 2>&1'
+ExecStartPre=-/bin/bash -c '/usr/bin/docker kill "$(docker ps -q --filter=name=^/%p-%i_)" > /dev/null 2>&1'
+ExecStartPre=-/bin/bash -c '/usr/bin/docker rm "$(docker ps -q --filter=name=^/%p-%i_)" > /dev/null 2>&1'
+ExecStartPre=/bin/bash -c 'docker history coco/coco-fleet-deployer:$DOCKER_APP_VERSION > /dev/null 2>&1 || docker pull coco/coco-fleet-deployer:$DOCKER_APP_VERSION'
+
 ExecStart=/bin/sh -c '\
   ROOT_URI=$(etcdctl get /ft/config/services-definition-root-uri); \
   IS_DEBUG=$(etcdctl get /ft/config/deployer/is-debug) || IS_DEBUG=false; \
   HEALTH_ENDPOINT=$(etcdctl get /ft/config/deployer/health-endpoint) || HEALTH_ENDPOINT=__health; \
   SERVICE_NAME_PREFIX=$(etcdctl get /ft/config/deployer/service-name-prefix) || SERVICE_NAME_PREFIX=__; \
-  docker run -v "/etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt" --rm --name %p \
+  docker run -v "/etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt" --rm --name %p-%i_$(uuidgen) \
   -e="DESTROY=true" \
   -e="IS_DEBUG=$IS_DEBUG" \
   -e="ROOT_URI=$ROOT_URI" \
@@ -24,6 +26,7 @@ ExecStart=/bin/sh -c '\
   -e="HEALTH_ENDPOINT=$HEALTH_ENDPOINT" \
   -e="SERVICE_NAME_PREFIX=$SERVICE_NAME_PREFIX" \
   coco/coco-fleet-deployer:$DOCKER_APP_VERSION'
-ExecStop=/usr/bin/docker stop -t 3 %p
+
+ExecStop=-/bin/bash -c 'docker stop -t 3 "$(docker ps -q --filter=name=^/%p-%i_)"'
 Restart=on-failure
 RestartSec=10
