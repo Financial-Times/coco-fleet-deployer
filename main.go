@@ -2,11 +2,15 @@ package main
 
 import (
 	"flag"
-	"log"
-	"time"
-
+	"fmt"
+	fthealth "github.com/Financial-Times/go-fthealth/v1a"
 	"github.com/coreos/fleet/schema"
+	"github.com/gorilla/handlers"
+	"github.com/gorilla/mux"
 	"github.com/kr/pretty"
+	"log"
+	"net/http"
+	"time"
 )
 
 //TODO add env var support
@@ -21,6 +25,8 @@ var (
 	healthURLPrefix         = flag.String("health-url-prefix", "http://localhost:8080", "health URL prefix")
 	healthEndpoint          = flag.String("health-endpoint", "__health", "health endpoint")
 	serviceNamePrefix       = flag.String("service-name-prefix", "__", "service name prefix")
+	healthBusinessImpact    = flag.String("business-impact", "Cannot retrieve service files", "business impact of health check")
+	appPort                 = flag.String("app-port", "8080", "Port of the app")
 )
 
 type services struct {
@@ -39,6 +45,8 @@ type service struct {
 type serviceDefinitionClient interface {
 	servicesDefinition() (services, error)
 	serviceFile(service service) ([]byte, error)
+	checkServiceFilesRepoHealth() error
+	rootURI() string
 }
 
 type serviceGroup struct {
@@ -74,12 +82,20 @@ func main() {
 		log.Printf("DEBUG Using configuration: \n %# v \n", pretty.Formatter(d))
 	}
 
+	setupHealthCheckHandler(d, *appPort)
+
 	for {
 		log.Print("Starting deploy run")
 		if err := d.deployAll(); err != nil {
-			log.Fatalf("Failed to run deploy : %v\n", err.Error())
+			log.Printf("Failed to run deploy : %v\n", err.Error())
 		}
 		log.Print("Finished deploy run")
 		time.Sleep(1 * time.Minute)
 	}
+}
+
+func setupHealthCheckHandler(d *deployer, appPort string) {
+	r := mux.NewRouter()
+	r.Path("/__health").Handler(handlers.MethodHandler{"GET": fthealth.Handler("", "", d.servicesDefinitionClientHealthCheck)})
+	http.ListenAndServe(fmt.Sprintf(":%s", appPort), r)
 }

@@ -3,17 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io"
-	"io/ioutil"
-	"log"
-	"net"
-	"net/http"
-	"net/url"
-	"strings"
-	"time"
-
-	"regexp"
-
 	etcdClient "github.com/coreos/etcd/client"
 	"github.com/coreos/fleet/client"
 	"github.com/coreos/fleet/schema"
@@ -21,6 +10,15 @@ import (
 	"github.com/kr/pretty"
 	"golang.org/x/net/context"
 	"golang.org/x/net/proxy"
+	"io"
+	"io/ioutil"
+	"log"
+	"net"
+	"net/http"
+	"net/url"
+	"regexp"
+	"strings"
+	"time"
 )
 
 type deployer struct {
@@ -34,6 +32,7 @@ type deployer struct {
 	healthURLPrefix         string
 	healthEndpoint          string
 	serviceNamePrefix       string
+	healthBusinessImpact    string
 }
 
 const launchedState = "launched"
@@ -61,7 +60,7 @@ func newDeployer() (*deployer, error) {
 		}
 		dialer, err := proxy.SOCKS5("tcp", *socksProxy, nil, netDialler)
 		if err != nil {
-			log.Fatalf("error with proxy %s: %v\n", *socksProxy, err)
+			fmt.Errorf("error with proxy %s: %v\n", *socksProxy, err)
 		}
 		httpClient.Transport = &http.Transport{
 			Proxy:               http.ProxyFromEnvironment,
@@ -105,6 +104,7 @@ func newDeployer() (*deployer, error) {
 		healthURLPrefix:         *healthURLPrefix,
 		healthEndpoint:          *healthEndpoint,
 		serviceNamePrefix:       *serviceNamePrefix,
+		healthBusinessImpact:    *healthBusinessImpact,
 	}, nil
 }
 
@@ -465,7 +465,8 @@ func (d *deployer) performSequentialDeploymentSK(sg serviceGroup) {
 		if err := d.fleetapi.SetUnitTargetState(u.Name, "launched"); err != nil {
 			continue
 		}
-		if (i + 1) == len(sg.sidekicks) { //this is the last node, we're done
+		if (i + 1) == len(sg.sidekicks) {
+			//this is the last node, we're done
 			break
 		}
 
@@ -480,7 +481,8 @@ func (d *deployer) performSequentialDeployment(sg serviceGroup) {
 		if err := d.fleetapi.SetUnitTargetState(u.Name, "launched"); err != nil {
 			continue
 		}
-		if (i + 1) == len(sg.serviceNodes) { //this is the last node, we're done
+		if (i + 1) == len(sg.serviceNodes) {
+			//this is the last node, we're done
 			break
 		}
 
@@ -756,13 +758,16 @@ func renderServiceFile(serviceTemplate []byte, context map[string]interface{}) (
 }
 
 func getServiceName(unitName string) string {
-	if strings.Contains(unitName, "sidekick") { //sidekick
+	if strings.Contains(unitName, "sidekick") {
+		//sidekick
 		return strings.Split(unitName, "-sidekick")[0]
 	}
-	if strings.Contains(unitName, "@.service") { //templated without node number
+	if strings.Contains(unitName, "@.service") {
+		//templated without node number
 		return strings.Split(unitName, "@.service")[0]
 	}
-	if strings.Contains(unitName, "@") { //templated with node number
+	if strings.Contains(unitName, "@") {
+		//templated with node number
 		return strings.Split(unitName, "@")[0]
 	}
 	return strings.Split(unitName, ".service")[0] //not templated

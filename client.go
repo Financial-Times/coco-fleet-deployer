@@ -17,20 +17,15 @@ type httpServiceDefinitionClient struct {
 }
 
 func (hsdc *httpServiceDefinitionClient) servicesDefinition() (services, error) {
-	servicesDefinitionUri := fmt.Sprintf("%vservices.yaml?%v", hsdc.rootURI, time.Now().Format(time.RFC3339))
-	resp, err := hsdc.httpClient.Get(servicesDefinitionUri)
+	resp, err := sendServicesDefinitionRequest(hsdc)
+
 	if err != nil {
 		return services{}, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return services{}, fmt.Errorf("Requesting services.yaml file returned %v HTTP status. The request URL is: %s\n", resp.Status, servicesDefinitionUri)
 	}
 
 	serviceYaml, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		panic(err)
+		return services{}, err
 	}
 	return renderServiceDefinitionYaml(serviceYaml)
 }
@@ -57,6 +52,15 @@ func (hsdc *httpServiceDefinitionClient) serviceFile(service service) ([]byte, e
 	return serviceTemplate, nil
 }
 
+func (hsdc *httpServiceDefinitionClient) checkServiceFilesRepoHealth() error {
+	_, err := sendServicesDefinitionRequest(hsdc)
+	return err
+}
+
+func (hsdc *httpServiceDefinitionClient) rootURI() string {
+	return hsdc.rootURI()
+}
+
 func renderServiceDefinitionYaml(serviceYaml []byte) (services services, err error) {
 	if err = yaml.Unmarshal(serviceYaml, &services); err != nil {
 		panic(err)
@@ -73,4 +77,19 @@ func buildServiceFileURI(service service, rootURI string) (string, error) {
 	}
 	uri := fmt.Sprintf("%s%s?%v", rootURI, service.Name, time.Now().Format(time.RFC3339))
 	return uri, nil
+}
+
+func sendServicesDefinitionRequest(hsdc *httpServiceDefinitionClient) (*http.Response, error) {
+	servicesDefinitionUri := fmt.Sprintf("%vservices.yaml?%v", hsdc.rootURI, time.Now().Format(time.RFC3339))
+	resp, err := hsdc.httpClient.Get(servicesDefinitionUri)
+	if err != nil {
+		return http.Response{}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return http.Response{}, fmt.Errorf("Requesting services.yaml file returned %v HTTP status. The request URL is: %s\n", resp.Status, servicesDefinitionUri)
+	}
+
+	return resp, nil
 }
