@@ -17,14 +17,15 @@ type httpServiceDefinitionClient struct {
 }
 
 func (hsdc *httpServiceDefinitionClient) servicesDefinition() (services, error) {
-	resp, err := hsdc.httpClient.Get(fmt.Sprintf("%vservices.yaml?%v", hsdc.rootURI, time.Now().Format(time.RFC3339)))
+	servicesDefinitionUri := fmt.Sprintf("%vservices.yaml?%v", hsdc.rootURI, time.Now().Format(time.RFC3339))
+	resp, err := hsdc.httpClient.Get(servicesDefinitionUri)
 	if err != nil {
 		return services{}, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return services{}, fmt.Errorf("Requesting services.yaml file returned %v HTTP status\n", resp.Status)
+		return services{}, fmt.Errorf("Requesting services.yaml file returned %v HTTP status. The request URL is: %s\n", resp.Status, servicesDefinitionUri)
 	}
 
 	serviceYaml, err := ioutil.ReadAll(resp.Body)
@@ -46,7 +47,7 @@ func (hsdc *httpServiceDefinitionClient) serviceFile(service service) ([]byte, e
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Requesting service file %v returned %v HTTP status\n", service.Name, resp.Status)
+		return nil, fmt.Errorf("Requesting service file %v returned %v HTTP status. The request URL is: %s\n", service.Name, resp.Status, serviceFileURI)
 	}
 
 	serviceTemplate, err := ioutil.ReadAll(resp.Body)
