@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	fthealth "github.com/Financial-Times/go-fthealth/v1a"
-	"log"
 )
 
 func (d *deployer) servicesDefinitionClientHealthCheck() fthealth.Check {
