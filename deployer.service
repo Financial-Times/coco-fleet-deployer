@@ -28,5 +28,3 @@ ExecStart=/bin/sh -c '\
   coco/coco-fleet-deployer:$DOCKER_APP_VERSION'
 
 ExecStop=-/bin/bash -c 'docker stop -t 3 "$(docker ps -q --filter=name=^/%p-%i_)"'
-Restart=on-failure
-RestartSec=10
