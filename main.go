@@ -29,6 +29,11 @@ var (
 	appPort                 = flag.String("app-port", "8080", "Port of the app")
 )
 
+const (
+	serviceDescription = "Service that deploys other services into Coco cluster"
+	serviceName = "Deployer"
+)
+
 type services struct {
 	Services []service `yaml:"services"`
 }
@@ -96,6 +101,6 @@ func main() {
 
 func setupHealthCheckHandler(d *deployer, appPort string) {
 	r := mux.NewRouter()
-	r.Path("/__health").Handler(handlers.MethodHandler{"GET": fthealth.Handler("", "", d.servicesDefinitionClientHealthCheck())})
+	r.Path("/__health").Handler(handlers.MethodHandler{"GET": http.HandlerFunc(fthealth.Handler(serviceName, serviceDescription, d.servicesDefinitionClientHealthCheck()))})
 	http.ListenAndServe(fmt.Sprintf(":%s", appPort), r)
 }
