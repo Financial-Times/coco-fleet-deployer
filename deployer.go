@@ -465,8 +465,7 @@ func (d *deployer) performSequentialDeploymentSK(sg serviceGroup) {
 		if err := d.fleetapi.SetUnitTargetState(u.Name, "launched"); err != nil {
 			continue
 		}
-		if (i + 1) == len(sg.sidekicks) {
-			//this is the last node, we're done
+		if (i + 1) == len(sg.sidekicks) { //this is the last node, we're done
 			break
 		}
 
@@ -481,8 +480,7 @@ func (d *deployer) performSequentialDeployment(sg serviceGroup) {
 		if err := d.fleetapi.SetUnitTargetState(u.Name, "launched"); err != nil {
 			continue
 		}
-		if (i + 1) == len(sg.serviceNodes) {
-			//this is the last node, we're done
+		if (i + 1) == len(sg.serviceNodes) { //this is the last node, we're done
 			break
 		}
 
@@ -758,16 +756,13 @@ func renderServiceFile(serviceTemplate []byte, context map[string]interface{}) (
 }
 
 func getServiceName(unitName string) string {
-	if strings.Contains(unitName, "sidekick") {
-		//sidekick
+	if strings.Contains(unitName, "sidekick") { //sidekick
 		return strings.Split(unitName, "-sidekick")[0]
 	}
-	if strings.Contains(unitName, "@.service") {
-		//templated without node number
+	if strings.Contains(unitName, "@.service") { //templated without node number
 		return strings.Split(unitName, "@.service")[0]
 	}
-	if strings.Contains(unitName, "@") {
-		//templated with node number
+	if strings.Contains(unitName, "@") { //templated with node number
 		return strings.Split(unitName, "@")[0]
 	}
 	return strings.Split(unitName, ".service")[0] //not templated
