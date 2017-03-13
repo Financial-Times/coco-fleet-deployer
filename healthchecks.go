@@ -7,7 +7,6 @@ import (
 )
 
 func (d *deployer) servicesDefinitionClientHealthCheck() fthealth.Check {
-	log.Print("Healthcheck test")
 	return fthealth.Check{
 		BusinessImpact:   d.healthBusinessImpact,
 		Name:             "Check connectivity to services definition location: %s",
