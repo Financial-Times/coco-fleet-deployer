@@ -46,7 +46,7 @@ type serviceDefinitionClient interface {
 	servicesDefinition() (services, error)
 	serviceFile(service service) ([]byte, error)
 	checkServiceFilesRepoHealth() error
-	rootURI() string
+	getRootURI() string
 }
 
 type serviceGroup struct {
@@ -96,6 +96,6 @@ func main() {
 
 func setupHealthCheckHandler(d *deployer, appPort string) {
 	r := mux.NewRouter()
-	r.Path("/__health").Handler(handlers.MethodHandler{"GET": fthealth.Handler("", "", d.servicesDefinitionClientHealthCheck)})
+	r.Path("/__health").Handler(handlers.MethodHandler{"GET": fthealth.Handler("", "", d.servicesDefinitionClientHealthCheck())})
 	http.ListenAndServe(fmt.Sprintf(":%s", appPort), r)
 }

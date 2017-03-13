@@ -23,6 +23,7 @@ func (hsdc *httpServiceDefinitionClient) servicesDefinition() (services, error) 
 		return services{}, err
 	}
 
+	defer resp.Body.Close()
 	serviceYaml, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return services{}, err
@@ -57,7 +58,7 @@ func (hsdc *httpServiceDefinitionClient) checkServiceFilesRepoHealth() error {
 	return err
 }
 
-func (hsdc *httpServiceDefinitionClient) rootURI() string {
+func (hsdc *httpServiceDefinitionClient) getRootURI() string {
 	return hsdc.rootURI()
 }
 
@@ -79,13 +80,12 @@ func buildServiceFileURI(service service, rootURI string) (string, error) {
 	return uri, nil
 }
 
-func sendServicesDefinitionRequest(hsdc *httpServiceDefinitionClient) (*http.Response, error) {
+func sendServicesDefinitionRequest(hsdc *httpServiceDefinitionClient) (http.Response, error) {
 	servicesDefinitionUri := fmt.Sprintf("%vservices.yaml?%v", hsdc.rootURI, time.Now().Format(time.RFC3339))
 	resp, err := hsdc.httpClient.Get(servicesDefinitionUri)
 	if err != nil {
 		return http.Response{}, err
 	}
-	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		return http.Response{}, fmt.Errorf("Requesting services.yaml file returned %v HTTP status. The request URL is: %s\n", resp.Status, servicesDefinitionUri)
