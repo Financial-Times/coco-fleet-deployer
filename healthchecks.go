@@ -3,9 +3,11 @@ package main
 import (
 	"fmt"
 	fthealth "github.com/Financial-Times/go-fthealth/v1a"
+	"log"
 )
 
 func (d *deployer) servicesDefinitionClientHealthCheck() fthealth.Check {
+	log.Print("Healthcheck test")
 	return fthealth.Check{
 		BusinessImpact:   d.healthBusinessImpact,
 		Name:             "Check connectivity to services definition location: %s",

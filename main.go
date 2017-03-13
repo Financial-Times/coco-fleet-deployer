@@ -15,23 +15,23 @@ import (
 
 //TODO add env var support
 var (
-	destroyFlag             = flag.Bool("destroy", false, "Destroy units not found in the definition")
-	fleetEndpoint           = flag.String("fleetEndpoint", "", "Fleet API http endpoint: `http://host:port`")
-	socksProxy              = flag.String("socksProxy", "", "address of socks proxy, e.g., 127.0.0.1:9050")
+	destroyFlag = flag.Bool("destroy", false, "Destroy units not found in the definition")
+	fleetEndpoint = flag.String("fleetEndpoint", "", "Fleet API http endpoint: `http://host:port`")
+	socksProxy = flag.String("socksProxy", "", "address of socks proxy, e.g., 127.0.0.1:9050")
 	destroyServiceBlacklist = map[string]struct{}{"deployer.service": struct{}{}, "deployer.timer": struct{}{}}
-	rootURI                 = flag.String("rootURI", "", "Base uri to use when constructing service file URI. Only used if service file URI is relative.")
-	isDebug                 = flag.Bool("isDebug", false, "Enable to show debug logs.")
-	etcdURL                 = flag.String("etcd-url", "http://localhost:2379", "etcd URL")
-	healthURLPrefix         = flag.String("health-url-prefix", "http://localhost:8080", "health URL prefix")
-	healthEndpoint          = flag.String("health-endpoint", "__health", "health endpoint")
-	serviceNamePrefix       = flag.String("service-name-prefix", "__", "service name prefix")
-	healthBusinessImpact    = flag.String("business-impact", "Cannot retrieve service files", "business impact of health check")
-	appPort                 = flag.String("app-port", "8080", "Port of the app")
+	rootURI = flag.String("rootURI", "", "Base uri to use when constructing service file URI. Only used if service file URI is relative.")
+	isDebug = flag.Bool("isDebug", false, "Enable to show debug logs.")
+	etcdURL = flag.String("etcd-url", "http://localhost:2379", "etcd URL")
+	healthURLPrefix = flag.String("health-url-prefix", "http://localhost:8080", "health URL prefix")
+	healthEndpoint = flag.String("health-endpoint", "__health", "health endpoint")
+	serviceNamePrefix = flag.String("service-name-prefix", "__", "service name prefix")
+	healthBusinessImpact = flag.String("business-impact", "Cannot retrieve service files", "business impact of health check")
+	appPort = flag.String("app-port", "8080", "Port of the app")
 )
 
 const (
 	serviceDescription = "Service that deploys other services into Coco cluster"
-	serviceName        = "Deployer"
+	serviceName = "Deployer"
 )
 
 type services struct {
@@ -103,4 +103,5 @@ func setupHealthCheckHandler(d *deployer, appPort string) {
 	r := mux.NewRouter()
 	r.Path("/__health").Handler(handlers.MethodHandler{"GET": http.HandlerFunc(fthealth.Handler(serviceName, serviceDescription, d.servicesDefinitionClientHealthCheck()))})
 	http.ListenAndServe(fmt.Sprintf(":%s", appPort), r)
+	log.Printf("Started listening on port %s", appPort)
 }
