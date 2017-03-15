@@ -12,16 +12,16 @@ import (
 
 //TODO add env var support
 var (
-	destroyFlag = flag.Bool("destroy", false, "Destroy units not found in the definition")
-	fleetEndpoint = flag.String("fleetEndpoint", "", "Fleet API http endpoint: `http://host:port`")
-	socksProxy = flag.String("socksProxy", "", "address of socks proxy, e.g., 127.0.0.1:9050")
-	destroyServiceBlacklist = map[string]struct{}{"deployer.service": struct{}{}, "deployer.timer": struct{}{}}
-	rootURI = flag.String("rootURI", "", "Base uri to use when constructing service file URI. Only used if service file URI is relative.")
-	isDebug = flag.Bool("isDebug", false, "Enable to show debug logs.")
-	etcdURL = flag.String("etcd-url", "http://localhost:2379", "etcd URL")
-	healthURLPrefix = flag.String("health-url-prefix", "http://localhost:8080", "health URL prefix")
-	healthEndpoint = flag.String("health-endpoint", "__health", "health endpoint")
-	serviceNamePrefix = flag.String("service-name-prefix", "__", "service name prefix")
+	destroyFlag                  = flag.Bool("destroy", false, "Destroy units not found in the definition")
+	fleetEndpoint                = flag.String("fleetEndpoint", "", "Fleet API http endpoint: `http://host:port`")
+	socksProxy                   = flag.String("socksProxy", "", "address of socks proxy, e.g., 127.0.0.1:9050")
+	destroyServiceBlacklist      = map[string]struct{}{"deployer.service": struct{}{}, "deployer.timer": struct{}{}}
+	rootURI                      = flag.String("rootURI", "", "Base uri to use when constructing service file URI. Only used if service file URI is relative.")
+	isDebug                      = flag.Bool("isDebug", false, "Enable to show debug logs.")
+	etcdURL                      = flag.String("etcd-url", "http://localhost:2379", "etcd URL")
+	healthURLPrefix              = flag.String("health-url-prefix", "http://localhost:8080", "health URL prefix")
+	healthEndpoint               = flag.String("health-endpoint", "__health", "health endpoint")
+	serviceNamePrefix            = flag.String("service-name-prefix", "__", "service name prefix")
 	noOfSecsToSleepBeforeRestart = flag.Int("no-of-secs-to-sleep-before-restart", 60, "Number of seconds to sleep before restarting the service in case of failure.")
 )
 
