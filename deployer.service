@@ -16,7 +16,7 @@ ExecStart=/bin/sh -c '\
   IS_DEBUG=$(etcdctl get /ft/config/deployer/is-debug) || IS_DEBUG=false; \
   HEALTH_ENDPOINT=$(etcdctl get /ft/config/deployer/health-endpoint) || HEALTH_ENDPOINT=__health; \
   SERVICE_NAME_PREFIX=$(etcdctl get /ft/config/deployer/service-name-prefix) || SERVICE_NAME_PREFIX=__; \
-  NO_OF_SECS_TO_SLEEP_BEFORE_RESTART=$(etcdctl get /ft/config/deployer/no-of-secs-to-sleep-before-restart) NO_OF_SECS_TO_SLEEP_BEFORE_RESTART=60; \
+  NO_OF_SECS_TO_SLEEP_BEFORE_RESTART=$(etcdctl get /ft/config/deployer/no-of-secs-to-sleep-before-restart) || NO_OF_SECS_TO_SLEEP_BEFORE_RESTART=60; \
   docker run -v "/etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt" --rm --name %p-%i_$(uuidgen) \
   -e="DESTROY=true" \
   -e="IS_DEBUG=$IS_DEBUG" \
