@@ -17,19 +17,20 @@ type httpServiceDefinitionClient struct {
 }
 
 func (hsdc *httpServiceDefinitionClient) servicesDefinition() (services, error) {
-	resp, err := hsdc.httpClient.Get(fmt.Sprintf("%vservices.yaml?%v", hsdc.rootURI, time.Now().Format(time.RFC3339)))
+	servicesDefinitionURI := fmt.Sprintf("%vservices.yaml?%v", hsdc.rootURI, time.Now().Format(time.RFC3339))
+	resp, err := hsdc.httpClient.Get(servicesDefinitionURI)
 	if err != nil {
-		return services{}, err
+		return services{}, fmt.Errorf("Failed to send request for services definition. The request URL is: %s  Error was: %s", servicesDefinitionURI, err.Error())
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return services{}, fmt.Errorf("Requesting services.yaml file returned %v HTTP status\n", resp.Status)
+		return services{}, fmt.Errorf("Requesting services.yaml file returned %v HTTP status. The request URL is: %s \n", resp.Status, servicesDefinitionURI)
 	}
 
 	serviceYaml, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		panic(err)
+		return services{}, fmt.Errorf("Failed to read services definition from response body. The request URL is: %s. Error was: %s", servicesDefinitionURI, err.Error())
 	}
 	return renderServiceDefinitionYaml(serviceYaml)
 }
@@ -41,25 +42,26 @@ func (hsdc *httpServiceDefinitionClient) serviceFile(service service) ([]byte, e
 	}
 	resp, err := hsdc.httpClient.Get(serviceFileURI)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Failed to send request for service file [service name is: %s]. The request URL is: %s  Error was: %s", service.Name, serviceFileURI, err.Error())
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Requesting service file %v returned %v HTTP status\n", service.Name, resp.Status)
+		return nil, fmt.Errorf("Requesting service file %v returned %v HTTP status. The request URL is: %s \n", service.Name, resp.Status, serviceFileURI)
 	}
 
 	serviceTemplate, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Failed to read service file [service name: %s] from response body. The request URL is: %s. Error was: %s", service.Name, serviceFileURI, err.Error())
 	}
 	return serviceTemplate, nil
 }
 
-func renderServiceDefinitionYaml(serviceYaml []byte) (services services, err error) {
-	if err = yaml.Unmarshal(serviceYaml, &services); err != nil {
-		panic(err)
+func renderServiceDefinitionYaml(serviceYaml []byte) (s services, err error) {
+	if err = yaml.Unmarshal(serviceYaml, &s); err != nil {
+		return services{}, fmt.Errorf("Error while unmarshalling services definitiona yaml file. Error was: %s", err.Error())
 	}
+
 	return
 }
 

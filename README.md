@@ -71,6 +71,7 @@ coco-fleet-deployer -fleetEndpoint="http://localhost:49153" -rootURI="https://ra
 - set the `/ft/config/deployer/is-debug` to `true` and restart the deployer - it should now show debug logs (see `Debug log enabled.` log on startup)
 - to disable, delete the key or set it to false
 - see the code for examples on how to add you own debug logs!
+- in case of failure during deploy,  to make debugging easier, the app will sleep for a certain number of seconds (60 by default) before exit. The number of seconds to sleep before exit can be set in etcd using the key: `/ft/config/deployer/no-of-secs-to-sleep-before-restart`
 
 ## Change in node count in services.yaml supported
 
