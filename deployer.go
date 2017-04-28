@@ -39,7 +39,7 @@ type deployer struct {
 const launchedState = "launched"
 const inactiveState = "inactive"
 const launchTimeout = time.Duration(5) * time.Minute
-const stateCheckInterval = time.Duration(30) * time.Second
+const stateCheckInterval = time.Duration(60) * time.Second
 
 var whitespaceMatcher, _ = regexp.Compile("\\s+")
 
